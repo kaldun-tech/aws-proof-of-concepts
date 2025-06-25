@@ -85,85 +85,85 @@ poc-1-serverless-architecture/
    - Set up appropriate request/response mappings
    - Deploy API to a stage
 
-## CloudFormation Deployment
+## Deployment and Teardown Instructions
 
 ### Prerequisites
-- AWS CLI installed and configured
-- S3 bucket for CloudFormation templates (optional)
+- AWS CLI installed and configured with appropriate credentials
+- PowerShell (pwsh) installed
+- S3 bucket for CloudFormation templates
 - Email address for SNS notifications
 
-### Deployment Steps
+### Deployment
 
-1. Create an S3 bucket for CloudFormation templates (optional):
-```bash
-aws s3 mb s3://ecommerce-serverless-poc-templates
+This project includes a comprehensive PowerShell deployment script that handles all aspects of deploying the infrastructure. You can deploy the entire stack or individual components.
+
+#### Deploy the Entire Stack
+
+```powershell
+# Navigate to the scripts directory
+cd infrastructure/scripts
+
+# Deploy all components
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component all -RunTests $true
 ```
 
-2. Package the CloudFormation templates:
-```bash
-aws cloudformation package \
-  --template-file infrastructure/cloudformation/main.yaml \
-  --s3-bucket ecommerce-serverless-poc-templates \
-  --output-template-file packaged-main.yaml
+#### Deploy Individual Components
+
+You can deploy specific components by changing the `-Component` parameter:
+
+```powershell
+# Deploy only IAM resources
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component iam
+
+# Deploy only DynamoDB
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component dynamodb
+
+# Deploy only SQS
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component sqs
+
+# Deploy only Lambda functions
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component lambda
+
+# Deploy only SNS
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component sns
+
+# Deploy only API Gateway
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component api-gateway
 ```
 
-3. Deploy the main stack with all nested stacks:
-```bash
-aws cloudformation deploy \
-  --template-file packaged-main.yaml \
-  --stack-name ecommerce-serverless-poc \
-  --parameter-overrides \
-      Environment=dev \
-      EmailAddress=your-email@example.com \
-  --capabilities CAPABILITY_NAMED_IAM
+#### Deployment Parameters
+
+| Parameter | Description | Required | Default |
+|-----------|-------------|----------|--------|
+| Environment | Deployment environment (dev, test, prod) | Yes | - |
+| EmailAddress | Email address for SNS notifications | Yes | - |
+| S3BucketName | S3 bucket for CloudFormation templates | Yes | - |
+| Component | Component to deploy (all, iam, dynamodb, sqs, lambda, sns, api-gateway) | No | all |
+| RunTests | Whether to run tests after deployment | No | $true |
+
+### Teardown
+
+To remove the deployed infrastructure, use the teardown script:
+
+```powershell
+# Navigate to the scripts directory
+cd infrastructure/scripts
+
+# Remove all components
+./teardown.ps1 -Environment dev -Force $false
 ```
 
-4. Deploy individual components (if not using nested stacks):
+The script will list all stacks that will be deleted and prompt for confirmation unless `-Force $true` is specified.
 
-   a. Deploy IAM resources:
-   ```bash
-   aws cloudformation deploy \
-     --template-file infrastructure/cloudformation/iam.yaml \
-     --stack-name ecommerce-serverless-poc-iam \
-     --capabilities CAPABILITY_NAMED_IAM
-   ```
+#### Teardown Parameters
 
-   b. Deploy DynamoDB table:
-   ```bash
-   aws cloudformation deploy \
-     --template-file infrastructure/cloudformation/dynamodb.yaml \
-     --stack-name ecommerce-serverless-poc-dynamodb
-   ```
-
-   c. Deploy SQS queue:
-   ```bash
-   aws cloudformation deploy \
-     --template-file infrastructure/cloudformation/sqs.yaml \
-     --stack-name ecommerce-serverless-poc-sqs
-   ```
-
-   d. Deploy Lambda functions:
-   ```bash
-   aws cloudformation deploy \
-     --template-file infrastructure/cloudformation/lambda.yaml \
-     --stack-name ecommerce-serverless-poc-lambda \
-     --capabilities CAPABILITY_IAM
-   ```
-
-   e. Deploy SNS topic:
-   ```bash
-   aws cloudformation deploy \
-     --template-file infrastructure/cloudformation/sns.yaml \
-     --stack-name ecommerce-serverless-poc-sns \
-     --parameter-overrides EmailAddress=your-email@example.com
-   ```
-
-   f. Deploy API Gateway:
-   ```bash
-   aws cloudformation deploy \
-     --template-file infrastructure/cloudformation/api-gateway.yaml \
-     --stack-name ecommerce-serverless-poc-api
-   ```
+| Parameter | Description | Required | Default |
+|-----------|-------------|----------|--------|
+| Environment | Environment name (dev, test, prod) | No | dev |
+| StackNamePrefix | Prefix used for all stack names | No | poc |
+| Region | AWS region where stacks are deployed | No | us-east-1 |
+| Force | Skip confirmation prompt | No | $false |
+| Component | Component to delete (all, iam, dynamodb, sqs, lambda, sns, api-gateway, main) | No | all |
 
 ## Architecture Diagram
 

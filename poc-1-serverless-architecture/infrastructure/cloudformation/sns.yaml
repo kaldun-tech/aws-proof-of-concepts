@@ -21,7 +21,7 @@ Resources:
   NotificationsTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: !Sub 'ecommerce-notifications-${Environment}'
+      TopicName: !Sub 'POC-Topic-${Environment}'
       DisplayName: 'E-Commerce Order Notifications'
       Tags:
         - Key: Environment

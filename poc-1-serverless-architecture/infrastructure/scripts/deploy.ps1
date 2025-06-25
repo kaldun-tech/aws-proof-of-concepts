@@ -19,8 +19,11 @@
 .PARAMETER Component
     The specific component to deploy (all, iam, dynamodb, sqs, lambda, sns, api-gateway).
 
+.PARAMETER RunTests
+    Whether to run tests after deployment.
+
 .EXAMPLE
-    ./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component all
+    ./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component all -RunTests $true
 #>
 
 param (
@@ -36,23 +39,26 @@ param (
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("all", "iam", "dynamodb", "sqs", "lambda", "sns", "api-gateway")]
-    [string]$Component = "all"
+    [string]$Component = "all",
+
+    [Parameter(Mandatory=$false)]
+    [bool]$RunTests = $true
 )
 
 # Set the AWS region
 $region = "us-east-1"
-$stackNamePrefix = "ecommerce-serverless-poc"
+$stackNamePrefix = "poc"
 $templateDir = Join-Path $PSScriptRoot ".." "cloudformation"
 
 # Function to check if S3 bucket exists, create if it doesn't
-function Ensure-S3Bucket {
+function New-S3Bucket {
     param (
         [string]$bucketName
     )
 
     try {
         Write-Host "Checking if S3 bucket $bucketName exists..."
-        $bucketExists = aws s3api head-bucket --bucket $bucketName 2>&1
+        aws s3api head-bucket --bucket $bucketName 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Creating S3 bucket $bucketName..."
             aws s3 mb s3://$bucketName --region $region
@@ -68,7 +74,7 @@ function Ensure-S3Bucket {
 }
 
 # Function to package CloudFormation templates
-function Package-CloudFormationTemplate {
+function ConvertTo-CloudFormationPackage {
     param (
         [string]$templateFile,
         [string]$s3Bucket,
@@ -90,7 +96,7 @@ function Package-CloudFormationTemplate {
 }
 
 # Function to deploy CloudFormation stack
-function Deploy-CloudFormationStack {
+function New-CloudFormationStack {
     param (
         [string]$stackName,
         [string]$templateFile,
@@ -116,9 +122,10 @@ function Deploy-CloudFormationStack {
         }
         
         if ($capabilities) {
-            $cmd += "--capabilities CAPABILITY_NAMED_IAM"
+            $cmd += "--capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
         }
         
+        Write-Host "Executing: $cmd"
         Invoke-Expression $cmd
     }
     catch {
@@ -127,8 +134,35 @@ function Deploy-CloudFormationStack {
     }
 }
 
+# Function to validate stack deployment success
+function Test-StackDeployment {
+    param (
+        [string]$stackName
+    )
+    
+    try {
+        Write-Host "Validating stack deployment: $stackName..."
+        $status = aws cloudformation describe-stacks --stack-name $stackName --query "Stacks[0].StackStatus" --output text --region $region
+        
+        if ($status -like "*COMPLETE") {
+            Write-Host "Stack $stackName deployed successfully with status: $status" -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host "Stack $stackName deployment status: $status" -ForegroundColor Yellow
+            if ($status -like "*FAILED" -or $status -like "*ROLLBACK*") {
+                Write-Error "Stack deployment failed or is in rollback state"
+                return $false
+            }
+            return $true
+        }
+    } catch {
+        Write-Error "Error validating stack deployment: $_"
+        return $false
+    }
+}
+
 # Ensure S3 bucket exists
-Ensure-S3Bucket -bucketName $S3BucketName
+New-S3Bucket -bucketName $S3BucketName
 
 # Deploy IAM stack
 if ($Component -eq "all" -or $Component -eq "iam") {
@@ -137,7 +171,11 @@ if ($Component -eq "all" -or $Component -eq "iam") {
     $parameters = @{
         "Environment" = $Environment
     }
-    Deploy-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters -capabilities $true
+    New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters -capabilities $true
+    if (-not (Test-StackDeployment -stackName $stackName)) {
+        Write-Error "IAM stack deployment failed or has issues. Stopping deployment."
+        exit 1
+    }
 }
 
 # Deploy DynamoDB stack
@@ -147,7 +185,11 @@ if ($Component -eq "all" -or $Component -eq "dynamodb") {
     $parameters = @{
         "Environment" = $Environment
     }
-    Deploy-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    if (-not (Test-StackDeployment -stackName $stackName)) {
+        Write-Error "DynamoDB stack deployment failed or has issues. Stopping deployment."
+        exit 1
+    }
 }
 
 # Deploy SQS stack
@@ -157,7 +199,11 @@ if ($Component -eq "all" -or $Component -eq "sqs") {
     $parameters = @{
         "Environment" = $Environment
     }
-    Deploy-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    if (-not (Test-StackDeployment -stackName $stackName)) {
+        Write-Error "SQS stack deployment failed or has issues. Stopping deployment."
+        exit 1
+    }
 }
 
 # Deploy SNS stack
@@ -168,7 +214,11 @@ if ($Component -eq "all" -or $Component -eq "sns") {
         "Environment" = $Environment
         "EmailAddress" = $EmailAddress
     }
-    Deploy-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    if (-not (Test-StackDeployment -stackName $stackName)) {
+        Write-Error "SNS stack deployment failed or has issues. Stopping deployment."
+        exit 1
+    }
 }
 
 # Deploy Lambda stack
@@ -192,7 +242,11 @@ if ($Component -eq "all" -or $Component -eq "lambda") {
         "LambdaSQSDynamoDBRoleARN" = $lambdaSQSDynamoDBRoleARN
         "LambdaDynamoDBSNSRoleARN" = $lambdaDynamoDBSNSRoleARN
     }
-    Deploy-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters -capabilities $true
+    New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters -capabilities $true
+    if (-not (Test-StackDeployment -stackName $stackName)) {
+        Write-Error "IAM stack deployment failed or has issues. Stopping deployment."
+        exit 1
+    }
 }
 
 # Deploy API Gateway stack
@@ -200,6 +254,7 @@ if ($Component -eq "all" -or $Component -eq "api-gateway") {
     # Get outputs from previous stacks
     $sqsQueueURL = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region
     $sqsQueueARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueARN'].OutputValue" --output text --region $region
+    $apiGatewaySQSRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='APIGatewaySQSRoleARN'].OutputValue" --output text --region $region
 
     $stackName = "$stackNamePrefix-api-gateway"
     $templateFile = Join-Path $templateDir "api-gateway.yaml"
@@ -207,8 +262,13 @@ if ($Component -eq "all" -or $Component -eq "api-gateway") {
         "Environment" = $Environment
         "SQSQueueURL" = $sqsQueueURL
         "SQSQueueARN" = $sqsQueueARN
+        "APIGatewaySQSRoleARN" = $apiGatewaySQSRoleARN
     }
-    Deploy-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
+    if (-not (Test-StackDeployment -stackName $stackName)) {
+        Write-Error "DynamoDB stack deployment failed or has issues. Stopping deployment."
+        exit 1
+    }
 }
 
 # Deploy main stack (if component is "all")
@@ -216,15 +276,122 @@ if ($Component -eq "all") {
     # Package the main template
     $mainTemplateFile = Join-Path $templateDir "main.yaml"
     $packagedMainTemplateFile = "packaged-main.yaml"
-    Package-CloudFormationTemplate -templateFile $mainTemplateFile -s3Bucket $S3BucketName -outputFile $packagedMainTemplateFile
+    ConvertTo-CloudFormationPackage -templateFile $mainTemplateFile -s3Bucket $S3BucketName -outputFile $packagedMainTemplateFile
 
     # Deploy the main stack
-    $stackName = "$stackNamePrefix"
+    $stackName = "$stackNamePrefix-main"
     $parameters = @{
         "Environment" = $Environment
         "EmailAddress" = $EmailAddress
     }
-    Deploy-CloudFormationStack -stackName $stackName -templateFile $packagedMainTemplateFile -parameters $parameters -capabilities $true
+    New-CloudFormationStack -stackName $stackName -templateFile $packagedMainTemplateFile -parameters $parameters -capabilities $true
+    if (-not (Test-StackDeployment -stackName $stackName)) {
+        Write-Error "Main stack deployment failed or has issues. Stopping deployment."
+        exit 1
+    }
+}
+
+# Function to test the deployed infrastructure
+function Test-DeployedInfrastructure {
+    param (
+        [string]$stackNamePrefix,
+        [string]$region
+    )
+    
+    Write-Host "Testing deployed infrastructure..." -ForegroundColor Cyan
+    
+    # Create a hashtable to store test results
+    $testResults = @{}
+    
+    try {
+        # Test 1: Verify API Gateway endpoint is accessible
+        $apiUrl = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-api-gateway" --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text --region $region
+        if ($apiUrl) {
+            Write-Host "API Gateway endpoint: $apiUrl" -ForegroundColor Green
+            Write-Host "Testing API Gateway connectivity..." -ForegroundColor Cyan
+            try {
+                $response = Invoke-WebRequest -Uri $apiUrl -Method GET -TimeoutSec 10 -ErrorAction SilentlyContinue
+                Write-Host "API Gateway connectivity test: Success (Status: $($response.StatusCode))" -ForegroundColor Green
+                $testResults["APIGateway"] = @{ "Endpoint" = $apiUrl; "Status" = $response.StatusCode; "Connected" = $true }
+            } catch {
+                Write-Host "API Gateway connectivity test: Failed - $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "Note: This might be expected if the API requires authentication or doesn't support GET requests" -ForegroundColor Yellow
+                $testResults["APIGateway"] = @{ "Endpoint" = $apiUrl; "Error" = $_.Exception.Message; "Connected" = $false }
+            }
+        } else {
+            Write-Host "API Gateway endpoint not found" -ForegroundColor Yellow
+            $testResults["APIGateway"] = @{ "Found" = $false }
+        }
+        
+        # Test 2: Verify DynamoDB table exists and is active
+        $tableName = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-dynamodb" --query "Stacks[0].Outputs[?OutputKey=='TableName'].OutputValue" --output text --region $region
+        if ($tableName) {
+            $tableStatus = aws dynamodb describe-table --table-name $tableName --query "Table.TableStatus" --output text --region $region
+            Write-Host "DynamoDB Table '$tableName' status: $tableStatus" -ForegroundColor Green
+            $testResults["DynamoDB"] = @{ "TableName" = $tableName; "Status" = $tableStatus }
+        } else {
+            Write-Host "DynamoDB table not found" -ForegroundColor Yellow
+            $testResults["DynamoDB"] = @{ "Found" = $false }
+        }
+        
+        # Test 3: Verify SQS queue is accessible
+        $queueUrl = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region
+        if ($queueUrl) {
+            # Get queue attributes and extract message count
+            $messageCount = (aws sqs get-queue-attributes --queue-url $queueUrl --attribute-names All --region $region | ConvertFrom-Json).Attributes.ApproximateNumberOfMessages
+            Write-Host "SQS Queue is accessible: $queueUrl (Messages: $messageCount)" -ForegroundColor Green
+            # Store the message count in the test results
+            $testResults["SQSQueue"] = @{ "QueueUrl" = $queueUrl; "MessageCount" = $messageCount }
+        } else {
+            Write-Host "SQS Queue URL not found" -ForegroundColor Yellow
+            $testResults["SQSQueue"] = @{ "Found" = $false }
+        }
+        
+        # Test 4: Verify SNS topic exists
+        $topicArn = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sns" --query "Stacks[0].Outputs[?OutputKey=='TopicARN'].OutputValue" --output text --region $region
+        if ($topicArn) {
+            # Check if topic exists by getting attributes
+            aws sns get-topic-attributes --topic-arn $topicArn --region $region | Out-Null
+            $subscriptionsCount = (aws sns list-subscriptions-by-topic --topic-arn $topicArn --region $region | ConvertFrom-Json).Subscriptions.Count
+            Write-Host "SNS Topic is accessible: $topicArn (Subscriptions: $subscriptionsCount)" -ForegroundColor Green
+            $testResults["SNSTopic"] = @{ "TopicArn" = $topicArn; "SubscriptionsCount" = $subscriptionsCount }
+        } else {
+            Write-Host "SNS Topic ARN not found" -ForegroundColor Yellow
+            $testResults["SNSTopic"] = @{ "Found" = $false }
+        }
+        
+        # Test 5: Verify Lambda functions exist and are active
+        $lambdaFunctions = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-lambda" --query "Stacks[0].Outputs[?starts_with(OutputKey,'LambdaFunction')].OutputValue" --output text --region $region
+        if ($lambdaFunctions) {
+            $lambdaResults = @{}
+            foreach ($function in $lambdaFunctions.Split()) {
+                # Verify function exists
+                aws lambda get-function --function-name $function --region $region | Out-Null
+                $runtime = aws lambda get-function --function-name $function --query "Configuration.Runtime" --output text --region $region
+                $state = aws lambda get-function --function-name $function --query "Configuration.State" --output text --region $region
+                $memorySize = aws lambda get-function --function-name $function --query "Configuration.MemorySize" --output text --region $region
+                Write-Host "Lambda function '$function' is $state (Runtime: $runtime, Memory: $memorySize MB)" -ForegroundColor Green
+                $lambdaResults[$function] = @{ "Runtime" = $runtime; "State" = $state; "MemorySize" = $memorySize }
+            }
+            $testResults["Lambda"] = $lambdaResults
+        } else {
+            Write-Host "No Lambda functions found" -ForegroundColor Yellow
+            $testResults["Lambda"] = @{ "Found" = $false }
+        }
+        
+        Write-Host "Infrastructure testing completed" -ForegroundColor Cyan
+        
+        # Return the collected test results
+        return $testResults
+    } catch {
+        Write-Error "Error testing infrastructure: $_"
+        return $null
+    }
 }
 
 Write-Host "Deployment completed successfully!"
+
+# Run infrastructure tests if component is "all" or if explicitly requested, and RunTests is true
+if (($Component -eq "all" -or $Component -eq "test") -and $RunTests) {
+    Test-DeployedInfrastructure -stackNamePrefix $stackNamePrefix -region $region
+}

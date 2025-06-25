@@ -38,7 +38,7 @@ Resources:
         - AttributeName: orderId
           KeyType: HASH
       StreamSpecification:
-        StreamViewType: NEW_AND_OLD_IMAGES
+        StreamViewType: NEW_IMAGE  # Per instructions: "For View type, choose New image"
       Tags:
         - Key: Environment
           Value: !Ref Environment

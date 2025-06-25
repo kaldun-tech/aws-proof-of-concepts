@@ -24,7 +24,7 @@ Resources:
   OrdersAPI:
     Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: !Sub 'ecommerce-orders-api-${Environment}'
+      Name: !Sub 'POC-API-${Environment}'
       Description: 'API for e-commerce orders'
       EndpointConfiguration:
         Types:
@@ -59,7 +59,7 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:sqs:path/${AWS::AccountId}/${SQSQueueURL#*/}'
         Credentials: !ImportValue 
-          Fn::Sub: 'ecommerce-serverless-poc-iam-${Environment}-APIGatewaySQSRoleARN'
+          Fn::Sub: 'POC-IAM-${Environment}-APIGatewaySQSRoleARN'
         RequestParameters:
           integration.request.header.Content-Type: "'application/x-www-form-urlencoded'"
         RequestTemplates:

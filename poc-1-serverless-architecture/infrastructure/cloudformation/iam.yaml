@@ -82,6 +82,7 @@ Resources:
             Resource: '*'
 
   # Lambda basic execution role policy for CloudWatch Logs
+  # In AWS Lambda best practices, it is recommended to use a managed policy for CloudWatch Logs
   LambdaBasicExecutionPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -118,6 +119,7 @@ Resources:
           Value: !Ref Environment
 
   # Role for Lambda function that processes DynamoDB Streams and publishes to SNS (POC-Lambda-2)
+  # In AWS Lambda best practices, it is recommended to use a managed policy for SNS publishing
   LambdaDynamoDBSNSRole:
     Type: AWS::IAM::Role
     Properties:
@@ -152,7 +154,8 @@ Resources:
               - 'sqs:SendMessage'
             Resource: '*'
 
-  # Role for API Gateway to send messages to SQS
+  # Role for API Gateway to send messages to SQS. Does not need any additional permissions for CloudWatch Logs
+  # In AWS API Gateway best practices, it is recommended to use a managed policy for SQS sending
   APIGatewaySQSRole:
     Type: AWS::IAM::Role
     Properties:

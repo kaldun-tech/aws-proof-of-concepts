@@ -36,7 +36,7 @@ Resources:
   OrdersQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub 'ecommerce-orders-queue-${Environment}'
+      QueueName: !Sub 'POC-Queue-${Environment}'
       VisibilityTimeout: !Ref VisibilityTimeout
       MessageRetentionPeriod: !Ref MessageRetentionPeriod
       RedrivePolicy:
@@ -46,7 +46,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Queue policy to allow API Gateway to send messages
+  # Queue policy to allow specific IAM roles to send and receive messages
   OrdersQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
@@ -55,14 +55,25 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
+          # Allow API Gateway role to send messages
           - Effect: Allow
             Principal:
-              Service: apigateway.amazonaws.com
+              AWS: 
+                Fn::ImportValue: !Sub 'POC-IAM-${Environment}-APIGatewaySQSRoleARN'
             Action: sqs:SendMessage
             Resource: !GetAtt OrdersQueue.Arn
-            Condition:
-              ArnEquals:
-                aws:SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*'
+          
+          # Allow Lambda role to receive messages
+          - Effect: Allow
+            Principal:
+              AWS: 
+                Fn::ImportValue: !Sub 'POC-IAM-${Environment}-LambdaSQSDynamoDBRoleARN'
+            Action: 
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
+            Resource: !GetAtt OrdersQueue.Arn
 
 Outputs:
   QueueURL:
