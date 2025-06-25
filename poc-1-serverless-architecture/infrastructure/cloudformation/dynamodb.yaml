@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - DynamoDB Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  ReadCapacityUnits:
+    Type: Number
+    Default: 5
+    Description: Read capacity units for the DynamoDB table
+  
+  WriteCapacityUnits:
+    Type: Number
+    Default: 5
+    Description: Write capacity units for the DynamoDB table
+
+Resources:
+  # DynamoDB table for storing e-commerce orders
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ecommerce-orders-${Environment}'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: !Ref ReadCapacityUnits
+        WriteCapacityUnits: !Ref WriteCapacityUnits
+      AttributeDefinitions:
+        - AttributeName: orderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: orderId
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  TableName:
+    Description: Name of the DynamoDB table
+    Value: !Ref OrdersTable
+    Export:
+      Name: !Sub '${AWS::StackName}-TableName'
+  
+  TableArn:
+    Description: ARN of the DynamoDB table
+    Value: !GetAtt OrdersTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TableArn'
+  
+  StreamArn:
+    Description: ARN of the DynamoDB Stream
+    Value: !GetAtt OrdersTable.StreamArn
+    Export:
+      Name: !Sub '${AWS::StackName}-StreamArn'

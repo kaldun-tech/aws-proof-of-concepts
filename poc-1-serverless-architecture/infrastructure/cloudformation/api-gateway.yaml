@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - API Gateway Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  SQSQueueURL:
+    Type: String
+    Description: URL of the SQS queue
+  
+  SQSQueueARN:
+    Type: String
+    Description: ARN of the SQS queue
+
+Resources:
+  # API Gateway REST API
+  OrdersAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'ecommerce-orders-api-${Environment}'
+      Description: 'API for e-commerce orders'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # API Gateway resource for orders
+  OrdersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      ParentId: !GetAtt OrdersAPI.RootResourceId
+      PathPart: 'orders'
+
+  # API Gateway method for POST /orders
+  OrdersMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      ResourceId: !Ref OrdersResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      RequestParameters:
+        method.request.header.Content-Type: false
+      RequestModels:
+        application/json: !Ref OrderRequestModel
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:sqs:path/${AWS::AccountId}/${SQSQueueURL#*/}'
+        Credentials: !ImportValue 
+          Fn::Sub: 'ecommerce-serverless-poc-iam-${Environment}-APIGatewaySQSRoleARN'
+        RequestParameters:
+          integration.request.header.Content-Type: "'application/x-www-form-urlencoded'"
+        RequestTemplates:
+          application/json: |
+            Action=SendMessage&MessageBody=$input.body
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: |
+                {
+                  "message": "Order submitted successfully",
+                  "timestamp": "$context.requestTime"
+                }
+            ResponseParameters:
+              method.response.header.Content-Type: "'application/json'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: !Ref OrderResponseModel
+          ResponseParameters:
+            method.response.header.Content-Type: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # API Gateway model for order request
+  OrderRequestModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      ContentType: application/json
+      Description: Model for order request
+      Schema:
+        $schema: http://json-schema.org/draft-04/schema#
+        title: OrderRequest
+        type: object
+        required:
+          - productId
+          - productName
+          - quantity
+          - customerEmail
+        properties:
+          productId:
+            type: string
+          productName:
+            type: string
+          quantity:
+            type: integer
+            minimum: 1
+          customerEmail:
+            type: string
+            format: email
+
+  # API Gateway model for order response
+  OrderResponseModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      ContentType: application/json
+      Description: Model for order response
+      Schema:
+        $schema: http://json-schema.org/draft-04/schema#
+        title: OrderResponse
+        type: object
+        properties:
+          message:
+            type: string
+          timestamp:
+            type: string
+
+  # API Gateway deployment
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - OrdersMethod
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      Description: !Sub 'Deployment for ${Environment} environment'
+
+  # API Gateway stage
+  APIStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      DeploymentId: !Ref APIDeployment
+      StageName: !Ref Environment
+      Description: !Sub 'Stage for ${Environment} environment'
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          MetricsEnabled: true
+          DataTraceEnabled: true
+          LoggingLevel: INFO
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CORS for API Gateway
+  OrdersOptionMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      ResourceId: !Ref OrdersResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+Outputs:
+  APIEndpoint:
+    Description: URL of the API Gateway endpoint
+    Value: !Sub 'https://${OrdersAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-APIEndpoint'
+  
+  APIId:
+    Description: ID of the API Gateway
+    Value: !Ref OrdersAPI
+    Export:
+      Name: !Sub '${AWS::StackName}-APIId'

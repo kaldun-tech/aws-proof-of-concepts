@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - SQS Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  VisibilityTimeout:
+    Type: Number
+    Default: 30
+    Description: The visibility timeout for the queue (in seconds)
+  
+  MessageRetentionPeriod:
+    Type: Number
+    Default: 345600  # 4 days
+    Description: The message retention period (in seconds)
+
+Resources:
+  # Dead Letter Queue for handling failed message processing
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'ecommerce-orders-dlq-${Environment}'
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Main SQS queue for e-commerce orders
+  OrdersQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'ecommerce-orders-queue-${Environment}'
+      VisibilityTimeout: !Ref VisibilityTimeout
+      MessageRetentionPeriod: !Ref MessageRetentionPeriod
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Queue policy to allow API Gateway to send messages
+  OrdersQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref OrdersQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt OrdersQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*'
+
+Outputs:
+  QueueURL:
+    Description: URL of the SQS queue
+    Value: !Ref OrdersQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-QueueURL'
+  
+  QueueARN:
+    Description: ARN of the SQS queue
+    Value: !GetAtt OrdersQueue.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-QueueARN'
+  
+  DeadLetterQueueURL:
+    Description: URL of the Dead Letter Queue
+    Value: !Ref DeadLetterQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-DeadLetterQueueURL'
+  
+  DeadLetterQueueARN:
+    Description: ARN of the Dead Letter Queue
+    Value: !GetAtt DeadLetterQueue.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DeadLetterQueueARN'

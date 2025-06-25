@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - Main Stack'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  EmailAddress:
+    Type: String
+    Description: Email address for SNS notifications
+    AllowedPattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+Resources:
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./iam.yaml
+      Parameters:
+        Environment: !Ref Environment
+      TimeoutInMinutes: 10
+
+  DynamoDBStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./dynamodb.yaml
+      Parameters:
+        Environment: !Ref Environment
+      TimeoutInMinutes: 10
+
+  SQSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./sqs.yaml
+      Parameters:
+        Environment: !Ref Environment
+      TimeoutInMinutes: 10
+
+  SNSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./sns.yaml
+      Parameters:
+        Environment: !Ref Environment
+        EmailAddress: !Ref EmailAddress
+      TimeoutInMinutes: 10
+
+  LambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./lambda.yaml
+      Parameters:
+        Environment: !Ref Environment
+        DynamoDBTableName: !GetAtt DynamoDBStack.Outputs.TableName
+        SQSQueueURL: !GetAtt SQSStack.Outputs.QueueURL
+        SQSQueueARN: !GetAtt SQSStack.Outputs.QueueARN
+        SNSTopicARN: !GetAtt SNSStack.Outputs.TopicARN
+        LambdaSQSDynamoDBRoleARN: !GetAtt IAMStack.Outputs.LambdaSQSDynamoDBRoleARN
+        LambdaDynamoDBSNSRoleARN: !GetAtt IAMStack.Outputs.LambdaDynamoDBSNSRoleARN
+      TimeoutInMinutes: 10
+      DependsOn:
+        - IAMStack
+        - DynamoDBStack
+        - SQSStack
+        - SNSStack
+
+  APIGatewayStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./api-gateway.yaml
+      Parameters:
+        Environment: !Ref Environment
+        SQSQueueURL: !GetAtt SQSStack.Outputs.QueueURL
+        SQSQueueARN: !GetAtt SQSStack.Outputs.QueueARN
+      TimeoutInMinutes: 10
+      DependsOn:
+        - SQSStack
+
+Outputs:
+  APIEndpoint:
+    Description: URL of the API Gateway endpoint
+    Value: !GetAtt APIGatewayStack.Outputs.APIEndpoint
+  
+  DynamoDBTableName:
+    Description: Name of the DynamoDB table
+    Value: !GetAtt DynamoDBStack.Outputs.TableName
+  
+  SQSQueueURL:
+    Description: URL of the SQS queue
+    Value: !GetAtt SQSStack.Outputs.QueueURL
+  
+  SNSTopicARN:
+    Description: ARN of the SNS topic
+    Value: !GetAtt SNSStack.Outputs.TopicARN

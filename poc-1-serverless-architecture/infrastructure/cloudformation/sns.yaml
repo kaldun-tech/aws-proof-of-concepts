@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - SNS Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  EmailAddress:
+    Type: String
+    Description: Email address for SNS notifications
+    AllowedPattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+Resources:
+  # SNS Topic for e-commerce notifications
+  NotificationsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'ecommerce-notifications-${Environment}'
+      DisplayName: 'E-Commerce Order Notifications'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Email subscription for the SNS topic
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref NotificationsTopic
+      Protocol: email
+      Endpoint: !Ref EmailAddress
+
+  # SNS Topic Policy to allow Lambda to publish messages
+  NotificationsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref NotificationsTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref NotificationsTopic
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:POC-Lambda-2-${Environment}'
+
+Outputs:
+  TopicARN:
+    Description: ARN of the SNS topic
+    Value: !Ref NotificationsTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicARN'
+  
+  TopicName:
+    Description: Name of the SNS topic
+    Value: !GetAtt NotificationsTopic.TopicName
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicName'

@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - IAM Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+Resources:
+  # Policy for Lambda function that processes SQS messages and writes to DynamoDB
+  LambdaSQSDynamoDBPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for Lambda function to process SQS messages and write to DynamoDB
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/POC-Lambda-1-${Environment}:*'
+          - Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+            Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:ecommerce-orders-queue-${Environment}'
+          - Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ecommerce-orders-${Environment}'
+
+  # Policy for Lambda function that processes DynamoDB Streams and publishes to SNS
+  LambdaDynamoDBSNSPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for Lambda function to process DynamoDB Streams and publish to SNS
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/POC-Lambda-2-${Environment}:*'
+          - Effect: Allow
+            Action:
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:DescribeStream
+              - dynamodb:ListStreams
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ecommerce-orders-${Environment}/stream/*'
+          - Effect: Allow
+            Action:
+              - sns:Publish
+            Resource: !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:ecommerce-notifications-${Environment}'
+
+  # Role for Lambda function that processes SQS messages and writes to DynamoDB
+  LambdaSQSDynamoDBRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'POC-Lambda-SQS-DynamoDB-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref LambdaSQSDynamoDBPolicy
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Role for Lambda function that processes DynamoDB Streams and publishes to SNS
+  LambdaDynamoDBSNSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'POC-Lambda-DynamoDB-SNS-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref LambdaDynamoDBSNSPolicy
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Policy for API Gateway to send messages to SQS
+  APIGatewaySQSPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for API Gateway to send messages to SQS
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:ecommerce-orders-queue-${Environment}'
+
+  # Role for API Gateway to send messages to SQS
+  APIGatewaySQSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'POC-API-Gateway-SQS-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref APIGatewaySQSPolicy
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  LambdaSQSDynamoDBRoleARN:
+    Description: ARN of the Lambda SQS DynamoDB Role
+    Value: !GetAtt LambdaSQSDynamoDBRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaSQSDynamoDBRoleARN'
+
+  LambdaDynamoDBSNSRoleARN:
+    Description: ARN of the Lambda DynamoDB SNS Role
+    Value: !GetAtt LambdaDynamoDBSNSRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaDynamoDBSNSRoleARN'
+
+  APIGatewaySQSRoleARN:
+    Description: ARN of the API Gateway SQS Role
+    Value: !GetAtt APIGatewaySQSRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGatewaySQSRoleARN'

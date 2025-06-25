@@ -1,0 +1,316 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - Lambda Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  DynamoDBTableName:
+    Type: String
+    Description: Name of the DynamoDB table
+  
+  SQSQueueURL:
+    Type: String
+    Description: URL of the SQS queue
+  
+  SQSQueueARN:
+    Type: String
+    Description: ARN of the SQS queue
+  
+  SNSTopicARN:
+    Type: String
+    Description: ARN of the SNS topic
+  
+  LambdaSQSDynamoDBRoleARN:
+    Type: String
+    Description: ARN of the Lambda SQS DynamoDB Role
+  
+  LambdaDynamoDBSNSRoleARN:
+    Type: String
+    Description: ARN of the Lambda DynamoDB SNS Role
+
+Resources:
+  # Lambda function that processes SQS messages and writes to DynamoDB
+  POCLambda1:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'POC-Lambda-1-${Environment}'
+      Handler: index.handler
+      Role: !Ref LambdaSQSDynamoDBRoleARN
+      Runtime: python3.9
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref DynamoDBTableName
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+          import uuid
+          from datetime import datetime
+          from typing import Dict, Any, Optional, List
+
+          import boto3
+          from botocore.exceptions import ClientError
+
+          # Configure logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          # Initialize DynamoDB client
+          dynamodb = boto3.resource('dynamodb')
+          table_name = os.environ['DYNAMODB_TABLE']
+          table = dynamodb.Table(table_name)
+
+          def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+              """
+              Lambda handler function that processes SQS messages and writes to DynamoDB.
+              
+              Args:
+                  event: The event dict containing the SQS messages
+                  context: The Lambda context object
+                  
+              Returns:
+                  Dict containing the processing results
+              """
+              logger.info(f"Received event: {json.dumps(event)}")
+              
+              if 'Records' not in event:
+                  logger.error("No Records found in event")
+                  return {'statusCode': 400, 'body': 'No Records found in event'}
+              
+              processed_records: List[str] = []
+              failed_records: List[str] = []
+              
+              try:
+                  for record in event['Records']:
+                      try:
+                          # Process the SQS message
+                          message_body = record['body']
+                          logger.info(f"Processing message: {message_body}")
+                          
+                          # Parse the message body
+                          order_data = json.loads(message_body)
+                          
+                          # Generate a unique order ID
+                          order_id = str(uuid.uuid4())
+                          timestamp = datetime.utcnow().isoformat()
+                          
+                          # Prepare the item for DynamoDB
+                          item = {
+                              'orderId': order_id,
+                              'timestamp': timestamp,
+                              'processed': False
+                          }
+                          
+                          # Add all fields from the order_data to the item
+                          item.update(order_data)
+                          
+                          # Write to DynamoDB
+                          table.put_item(Item=item)
+                          
+                          logger.info(f"Successfully processed order {order_id}")
+                          processed_records.append(order_id)
+                          
+                      except Exception as e:
+                          logger.error(f"Error processing record: {str(e)}")
+                          failed_records.append(record['messageId'])
+                  
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps({
+                          'processed': processed_records,
+                          'failed': failed_records
+                      })
+                  }
+                  
+              except Exception as e:
+                  logger.error(f"Error in handler: {str(e)}")
+                  return {
+                      'statusCode': 500,
+                      'body': f"Error processing records: {str(e)}"
+                  }
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Lambda function that processes DynamoDB Streams and publishes to SNS
+  POCLambda2:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'POC-Lambda-2-${Environment}'
+      Handler: index.handler
+      Role: !Ref LambdaDynamoDBSNSRoleARN
+      Runtime: python3.9
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref SNSTopicARN
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+          from typing import Dict, Any, List, Optional
+
+          import boto3
+          from botocore.exceptions import ClientError
+
+          # Configure logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          # Initialize SNS client
+          sns = boto3.client('sns')
+          sns_topic_arn = os.environ['SNS_TOPIC_ARN']
+
+          def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+              """
+              Lambda handler function that processes DynamoDB Stream events and publishes to SNS.
+              
+              Args:
+                  event: The event dict containing the DynamoDB Stream events
+                  context: The Lambda context object
+                  
+              Returns:
+                  Dict containing the processing results
+              """
+              logger.info(f"Received event: {json.dumps(event)}")
+              
+              if 'Records' not in event:
+                  logger.error("No Records found in event")
+                  return {'statusCode': 400, 'body': 'No Records found in event'}
+              
+              processed_records: List[str] = []
+              failed_records: List[str] = []
+              
+              try:
+                  for record in event['Records']:
+                      try:
+                          # Check if this is a new record (INSERT)
+                          if record['eventName'] != 'INSERT':
+                              logger.info(f"Skipping non-INSERT event: {record['eventName']}")
+                              continue
+                          
+                          # Get the new image (the item that was inserted)
+                          new_image = record['dynamodb']['NewImage']
+                          
+                          # Convert DynamoDB JSON to regular JSON
+                          order_data = deserialize_dynamodb_item(new_image)
+                          
+                          # Create a message for SNS
+                          message = {
+                              'orderId': order_data.get('orderId', 'Unknown'),
+                              'timestamp': order_data.get('timestamp', 'Unknown'),
+                              'productName': order_data.get('productName', 'Unknown'),
+                              'quantity': order_data.get('quantity', 0),
+                              'customerEmail': order_data.get('customerEmail', 'Unknown'),
+                              'message': f"New order received for {order_data.get('productName', 'Unknown')}"
+                          }
+                          
+                          # Publish to SNS
+                          response = sns.publish(
+                              TopicArn=sns_topic_arn,
+                              Message=json.dumps(message),
+                              Subject=f"New Order: {message['orderId']}"
+                          )
+                          
+                          logger.info(f"Published message to SNS: {response['MessageId']}")
+                          processed_records.append(order_data.get('orderId', 'Unknown'))
+                          
+                      except Exception as e:
+                          logger.error(f"Error processing record: {str(e)}")
+                          failed_records.append(record['eventID'])
+                  
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps({
+                          'processed': processed_records,
+                          'failed': failed_records
+                      })
+                  }
+                  
+              except Exception as e:
+                  logger.error(f"Error in handler: {str(e)}")
+                  return {
+                      'statusCode': 500,
+                      'body': f"Error processing records: {str(e)}"
+                  }
+          
+          def deserialize_dynamodb_item(item: Dict[str, Any]) -> Dict[str, Any]:
+              """
+              Convert DynamoDB JSON to regular JSON.
+              
+              Args:
+                  item: The DynamoDB JSON item
+                  
+              Returns:
+                  Dict containing the deserialized item
+              """
+              result: Dict[str, Any] = {}
+              
+              for key, value in item.items():
+                  if 'S' in value:
+                      result[key] = value['S']
+                  elif 'N' in value:
+                      result[key] = float(value['N'])
+                      # Convert to int if it's a whole number
+                      if result[key].is_integer():
+                          result[key] = int(result[key])
+                  elif 'BOOL' in value:
+                      result[key] = value['BOOL']
+                  elif 'NULL' in value:
+                      result[key] = None
+                  elif 'L' in value:
+                      result[key] = [deserialize_dynamodb_item({'item': item}) for item in value['L']]
+                  elif 'M' in value:
+                      result[key] = deserialize_dynamodb_item(value['M'])
+              
+              return result
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Event source mapping for SQS to Lambda
+  SQSEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 10
+      Enabled: true
+      EventSourceArn: !Ref SQSQueueARN
+      FunctionName: !GetAtt POCLambda1.Arn
+
+  # Event source mapping for DynamoDB Streams to Lambda
+  DynamoDBEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 100
+      Enabled: true
+      EventSourceArn: !ImportValue 
+        Fn::Sub: 'ecommerce-serverless-poc-dynamodb-${Environment}-StreamArn'
+      FunctionName: !GetAtt POCLambda2.Arn
+      StartingPosition: LATEST
+
+Outputs:
+  POCLambda1Arn:
+    Description: ARN of the first Lambda function
+    Value: !GetAtt POCLambda1.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-POCLambda1Arn'
+  
+  POCLambda2Arn:
+    Description: ARN of the second Lambda function
+    Value: !GetAtt POCLambda2.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-POCLambda2Arn'
