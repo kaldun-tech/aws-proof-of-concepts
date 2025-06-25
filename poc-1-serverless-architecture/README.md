@@ -15,31 +15,27 @@ The architecture follows this flow:
 5. The second Lambda function passes the database entry to SNS
 6. SNS sends a notification to the specified email address
 
-![Architecture Diagram](docs/images/architecture-diagram.png)
+![Architecture Diagram](docs/images/poc1-architecture.png)
 
 ## Directory Structure
 ```
 poc-1-serverless-architecture/
-├── src/                        # Source code
-│   ├── lambda/                 # Lambda function code
-│   │   ├── poc-lambda-1/       # First Lambda function (SQS to DynamoDB)
-│   │   └── poc-lambda-2/       # Second Lambda function (DynamoDB to SNS)
-│   └── api/                    # API Gateway configuration
 ├── docs/                       # Documentation
-│   ├── images/                 # Architecture diagrams and screenshots
-│   └── guides/                 # Implementation guides and notes
+│   └── images/                 # Architecture diagrams and screenshots
 ├── infrastructure/             # Infrastructure as Code
 │   ├── cloudformation/         # CloudFormation templates
 │   │   ├── main.yaml           # Main stack template
 │   │   ├── iam.yaml            # IAM policies and roles
 │   │   ├── api-gateway.yaml    # API Gateway resources
 │   │   ├── sqs.yaml            # SQS queue resources
-│   │   ├── lambda.yaml         # Lambda functions resources
+│   │   ├── lambda.yaml         # Lambda functions resources with embedded code
 │   │   ├── dynamodb.yaml       # DynamoDB table and streams
 │   │   └── sns.yaml            # SNS topic and subscriptions
 │   └── scripts/                # Deployment and utility scripts
 └── README.md                   # This file
 ```
+
+> **Note:** The Lambda function code is embedded directly in the CloudFormation templates rather than being stored in separate files.
 
 ## Implementation Plan
 
