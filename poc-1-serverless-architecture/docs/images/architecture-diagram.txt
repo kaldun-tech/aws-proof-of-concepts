@@ -1,0 +1,42 @@
+E-Commerce Serverless Architecture Flow
+====================================
+
++----------------+     +-----------------+     +----------------+     +----------------+
+|                |     |                 |     |                |     |                |
+|    Client      +---->+  API Gateway    +---->+   SQS Queue    +---->+  POC-Lambda-1  |
+|                |     |  REST API       |     |                |     |                |
++----------------+     +-----------------+     +----------------+     +-------+--------+
+                                                                              |
+                                                                              |
+                                                                              v
++----------------+     +-----------------+     +----------------+     +----------------+
+|                |     |                 |     |                |     |                |
+|    Email       +<----+   SNS Topic     +<----+  POC-Lambda-2  +<----+   DynamoDB     |
+| Notification   |     |                 |     |                |     |   + Streams    |
++----------------+     +-----------------+     +----------------+     +----------------+
+
+Flow Description:
+----------------
+1. Client sends HTTP request to API Gateway REST API endpoint
+2. API Gateway forwards the request payload to SQS Queue
+3. SQS Queue triggers POC-Lambda-1 function
+4. POC-Lambda-1 processes the message and writes data to DynamoDB table
+5. DynamoDB Streams captures the table changes
+6. DynamoDB Streams triggers POC-Lambda-2 function
+7. POC-Lambda-2 processes the stream event and publishes message to SNS Topic
+8. SNS Topic sends email notification to subscribed email address
+
+IAM Roles and Policies:
+---------------------
+- POC-Lambda-SQS-DynamoDB-Role: Role for POC-Lambda-1
+  - Lambda-Basic-Execution: CloudWatch Logs access
+  - Lambda-Read-SQS: SQS message processing
+  - Lambda-Write-DynamoDB: DynamoDB write access
+
+- POC-Lambda-DynamoDB-SNS-Role: Role for POC-Lambda-2
+  - Lambda-Basic-Execution: CloudWatch Logs access
+  - Lambda-DynamoDBStreams-Read: DynamoDB Streams access
+  - Lambda-SNS-Publish: SNS publishing access
+
+- POC-API-Gateway-SQS-Role: Role for API Gateway
+  - API Gateway SQS access policy

@@ -12,59 +12,92 @@ Parameters:
       - prod
 
 Resources:
-  # Policy for Lambda function that processes SQS messages and writes to DynamoDB
-  LambdaSQSDynamoDBPolicy:
+  # Lambda-Write-DynamoDB policy
+  LambdaWriteDynamoDBPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: Policy for Lambda function to process SQS messages and write to DynamoDB
+      ManagedPolicyName: !Sub 'Lambda-Write-DynamoDB-${Environment}'
+      Description: 'Policy for Lambda function to write to DynamoDB'
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: Allow
+          - Sid: 'VisualEditor0'
+            Effect: 'Allow'
             Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/POC-Lambda-1-${Environment}:*'
-          - Effect: Allow
-            Action:
-              - sqs:ReceiveMessage
-              - sqs:DeleteMessage
-              - sqs:GetQueueAttributes
-            Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:ecommerce-orders-queue-${Environment}'
-          - Effect: Allow
-            Action:
-              - dynamodb:PutItem
-              - dynamodb:UpdateItem
-            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ecommerce-orders-${Environment}'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:DescribeTable'
+            Resource: '*'
 
-  # Policy for Lambda function that processes DynamoDB Streams and publishes to SNS
-  LambdaDynamoDBSNSPolicy:
+  # Lambda-SNS-Publish policy
+  LambdaSNSPublishPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: Policy for Lambda function to process DynamoDB Streams and publish to SNS
+      ManagedPolicyName: !Sub 'Lambda-SNS-Publish-${Environment}'
+      Description: 'Policy for SNS to get, list, and publish topics that are received by Lambda'
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: Allow
+          - Sid: 'VisualEditor0'
+            Effect: 'Allow'
             Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/POC-Lambda-2-${Environment}:*'
-          - Effect: Allow
-            Action:
-              - dynamodb:GetRecords
-              - dynamodb:GetShardIterator
-              - dynamodb:DescribeStream
-              - dynamodb:ListStreams
-            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ecommerce-orders-${Environment}/stream/*'
-          - Effect: Allow
-            Action:
-              - sns:Publish
-            Resource: !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:ecommerce-notifications-${Environment}'
+              - 'sns:Publish'
+              - 'sns:GetTopicAttributes'
+              - 'sns:ListTopics'
+            Resource: '*'
 
-  # Role for Lambda function that processes SQS messages and writes to DynamoDB
+  # Lambda-DynamoDBStreams-Read policy
+  LambdaDynamoDBStreamsReadPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'Lambda-DynamoDBStreams-Read-${Environment}'
+      Description: 'Policy for Lambda function to read records from DynamoDB Streams'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'VisualEditor0'
+            Effect: 'Allow'
+            Action:
+              - 'dynamodb:GetShardIterator'
+              - 'dynamodb:DescribeStream'
+              - 'dynamodb:ListStreams'
+              - 'dynamodb:GetRecords'
+            Resource: '*'
+
+  # Lambda-Read-SQS policy
+  LambdaReadSQSPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'Lambda-Read-SQS-${Environment}'
+      Description: 'Policy for Lambda function to read messages from SQS'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'VisualEditor0'
+            Effect: 'Allow'
+            Action:
+              - 'sqs:DeleteMessage'
+              - 'sqs:ReceiveMessage'
+              - 'sqs:GetQueueAttributes'
+              - 'sqs:ChangeMessageVisibility'
+            Resource: '*'
+
+  # Lambda basic execution role policy for CloudWatch Logs
+  LambdaBasicExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'Lambda-Basic-Execution-${Environment}'
+      Description: 'Basic execution policy for Lambda functions to write logs'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+
+  # Role for Lambda function that processes SQS messages and writes to DynamoDB (POC-Lambda-1)
   LambdaSQSDynamoDBRole:
     Type: AWS::IAM::Role
     Properties:
@@ -77,12 +110,14 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - !Ref LambdaSQSDynamoDBPolicy
+        - !Ref LambdaBasicExecutionPolicy
+        - !Ref LambdaReadSQSPolicy
+        - !Ref LambdaWriteDynamoDBPolicy
       Tags:
         - Key: Environment
           Value: !Ref Environment
 
-  # Role for Lambda function that processes DynamoDB Streams and publishes to SNS
+  # Role for Lambda function that processes DynamoDB Streams and publishes to SNS (POC-Lambda-2)
   LambdaDynamoDBSNSRole:
     Type: AWS::IAM::Role
     Properties:
@@ -95,7 +130,9 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - !Ref LambdaDynamoDBSNSPolicy
+        - !Ref LambdaBasicExecutionPolicy
+        - !Ref LambdaDynamoDBStreamsReadPolicy
+        - !Ref LambdaSNSPublishPolicy
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -104,14 +141,16 @@ Resources:
   APIGatewaySQSPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: Policy for API Gateway to send messages to SQS
+      ManagedPolicyName: !Sub 'API-Gateway-SQS-SendMessage-${Environment}'
+      Description: 'Policy for API Gateway to send messages to SQS'
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: Allow
+          - Sid: 'VisualEditor0'
+            Effect: 'Allow'
             Action:
-              - sqs:SendMessage
-            Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:ecommerce-orders-queue-${Environment}'
+              - 'sqs:SendMessage'
+            Resource: '*'
 
   # Role for API Gateway to send messages to SQS
   APIGatewaySQSRole:
