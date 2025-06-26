@@ -28,9 +28,9 @@ Each proof of concept is implemented using:
 
 A serverless application architecture using AWS Lambda, API Gateway, DynamoDB, and other serverless services.
 
-### POC 2: Containerized Microservices
+### POC 2: Data Analytics
 
-A microservices architecture using Amazon ECS/EKS, ECR, and related container services.
+A data analytics solution using Amazon API Gateway, Lambda, Kinesis Data Firehose, S3, Athena, and QuickSight to ingest, store, and visualize clickstream data.
 
 ### POC 3: Data Lake Analytics
 
