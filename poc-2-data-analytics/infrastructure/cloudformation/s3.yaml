@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for creating a simple S3 bucket in us-east-1 for data analytics POC'
+
+Parameters:
+  FirehoseRoleArn:
+    Type: String
+    Description: ARN of the IAM role for Kinesis Firehose delivery stream
+
+Resources:
+  DataAnalyticsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 'poc2-data-analytics-kt'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: POC-2-Data-Analytics
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  DataAnalyticsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DataAnalyticsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: 'PolicyID'
+        Statement:
+          - Sid: 'StmtID'
+            Effect: 'Allow'
+            Principal:
+              AWS: !Ref FirehoseRoleArn
+            Action:
+              - 's3:AbortMultipartUpload'
+              - 's3:GetBucketLocation'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:PutObject'
+              - 's3:PutObjectAcl'
+            Resource:
+              - !GetAtt DataAnalyticsBucket.Arn
+              - !Sub '${DataAnalyticsBucket.Arn}/*'
+
+Outputs:
+  BucketName:
+    Description: Name of the S3 bucket
+    Value: !Ref DataAnalyticsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+  BucketArn:
+    Description: ARN of the S3 bucket
+    Value: !GetAtt DataAnalyticsBucket.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketArn'

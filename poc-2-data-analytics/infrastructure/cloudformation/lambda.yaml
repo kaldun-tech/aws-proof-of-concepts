@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Lambda function to process Kinesis Firehose stream records'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+Resources:
+  TransformDataLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: KinesisFirehoseAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'firehose:DescribeDeliveryStream'
+                  - 'firehose:ListDeliveryStreams'
+                  - 'firehose:ListTagsForDeliveryStream'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+
+  TransformDataFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'transform-data-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt TransformDataLambdaRole.Arn
+      Runtime: python3.8
+      Timeout: 60
+      MemorySize: 128
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          """Blueprint for processing records sent to a Kinesis Firehose stream."""
+          import json
+          import boto3
+          import base64
+
+          output = []
+
+          def lambda_handler(event, context):
+
+              for record in event['records']:
+                  payload = base64.b64decode(record['data']).decode('utf-8')
+
+                  row_w_newline = payload + "\n"
+                  row_w_newline = base64.b64encode(row_w_newline.encode('utf-8'))
+
+                  output_record = {
+                      'recordId': record['recordId'],
+                      'result': 'Ok',
+                      'data': row_w_newline
+                  }
+                  output.append(output_record)
+
+              return {'records': output}
+
+Outputs:
+  TransformDataFunctionName:
+    Description: Name of the Lambda function
+    Value: !Ref TransformDataFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-TransformDataFunctionName'
+  TransformDataFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt TransformDataFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TransformDataFunctionArn'
+  TransformDataRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt TransformDataLambdaRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TransformDataRoleArn'

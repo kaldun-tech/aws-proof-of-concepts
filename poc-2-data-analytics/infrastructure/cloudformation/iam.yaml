@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Data Analytics - IAM Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+Resources:
+  # API Kinesis Data Firehose policy
+  KinesisDataFirehosePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'KinesisDataFirehose-${Environment}'
+      Description: 'Policy for Kinesis Data Firehose'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'VisualEditor0'
+            Effect: 'Allow'
+            Action:
+              - 'firehose:PutRecord'
+            Resource: '*'
+
+  # APIGateway Firehose role
+  APIGatewayFirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'APIGatewayFirehose-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref KinesisDataFirehosePolicy
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'VisualEditor0'
+            Effect: 'Allow'
+            Action:
+              - 'firehose:PutRecord'
+            Resource: '*'

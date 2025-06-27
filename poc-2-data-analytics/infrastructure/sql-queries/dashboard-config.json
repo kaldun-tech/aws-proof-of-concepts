@@ -1,0 +1,73 @@
+{
+  "dashboardName": "Clickstream Analytics Dashboard",
+  "visualizations": [
+    {
+      "name": "Menu Item Popularity",
+      "type": "BAR_CHART",
+      "dimensions": [
+        "element_clicked"
+      ],
+      "measures": [
+        "COUNT(*)"
+      ],
+      "sortBy": {
+        "field": "COUNT(*)",
+        "direction": "DESC"
+      }
+    },
+    {
+      "name": "Time Spent Analysis",
+      "type": "BOX_PLOT",
+      "dimensions": [
+        "element_clicked"
+      ],
+      "measures": [
+        "time_spent"
+      ]
+    },
+    {
+      "name": "Source Menu Analysis",
+      "type": "PIE_CHART",
+      "dimensions": [
+        "source_menu"
+      ],
+      "measures": [
+        "COUNT(*)"
+      ]
+    },
+    {
+      "name": "Time Series Analysis",
+      "type": "LINE_CHART",
+      "dimensions": [
+        "datehour"
+      ],
+      "measures": [
+        "COUNT(*)"
+      ],
+      "sortBy": {
+        "field": "datehour",
+        "direction": "ASC"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "name": "Date Range Filter",
+      "column": "datehour",
+      "type": "DATETIME_RANGE"
+    },
+    {
+      "name": "Source Menu Filter",
+      "column": "source_menu",
+      "type": "MULTISELECT"
+    },
+    {
+      "name": "Time Spent Filter",
+      "column": "time_spent",
+      "type": "RANGE"
+    }
+  ],
+  "refreshSchedule": {
+    "frequency": "HOURLY"
+  }
+}

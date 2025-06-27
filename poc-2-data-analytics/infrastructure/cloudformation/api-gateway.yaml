@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for API Gateway to ingest clickstream data into Kinesis Firehose'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  FirehoseDeliveryStreamName:
+    Type: String
+    Description: Name of the Kinesis Firehose delivery stream
+  
+  APIGatewayFirehoseRoleARN:
+    Type: String
+    Description: ARN of the IAM role that allows API Gateway to invoke Kinesis Firehose
+
+Resources:
+  # API Gateway REST API
+  ClickstreamIngestAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: 'clickstream-ingest-poc'
+      Description: 'REST API for ingesting clickstream data into Kinesis Firehose'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: POC-2-Data-Analytics
+          
+  # API Gateway Resource
+  PocResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ClickstreamIngestAPI
+      ParentId: !GetAtt ClickstreamIngestAPI.RootResourceId
+      PathPart: 'poc'
+  
+  # API Gateway POST Method
+  PocPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ClickstreamIngestAPI
+      ResourceId: !Ref PocResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:firehose:action/PutRecord'
+        Credentials: !Ref APIGatewayFirehoseRoleARN
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+        RequestTemplates:
+          application/json: !Sub |
+            {
+              "DeliveryStreamName": "${FirehoseDeliveryStreamName}",
+              "Record": {
+                "Data": "$util.base64Encode($util.escapeJavaScript($input.json('$')).replace('\\\\'', ''))"
+              }
+            }
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: '{"status":"success"}'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+  
+  # OPTIONS method for CORS
+  PocOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ClickstreamIngestAPI
+      ResourceId: !Ref PocResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: 'Empty'
+  
+  # API Gateway Deployment
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - PocPostMethod
+      - PocOptionsMethod
+    Properties:
+      RestApiId: !Ref ClickstreamIngestAPI
+      Description: !Sub 'Deployment for ${Environment} environment'
+  
+  # API Gateway Stage
+  APIStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref ClickstreamIngestAPI
+      DeploymentId: !Ref APIDeployment
+      StageName: !Ref Environment
+      Description: !Sub 'Stage for ${Environment} environment'
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          MetricsEnabled: true
+          DataTraceEnabled: true
+          LoggingLevel: INFO
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  ClickstreamIngestAPIId:
+    Description: ID of the API Gateway REST API
+    Value: !Ref ClickstreamIngestAPI
+    Export:
+      Name: !Sub '${AWS::StackName}-ClickstreamIngestAPIId'
+  
+  ClickstreamIngestAPIEndpoint:
+    Description: URL of the API Gateway endpoint
+    Value: !Sub 'https://${ClickstreamIngestAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/poc'
+    Export:
+      Name: !Sub '${AWS::StackName}-ClickstreamIngestAPIEndpoint'

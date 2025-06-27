@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Athena resources for Data Analytics POC'
+
+Parameters:
+  Environment:
+    Description: Environment (dev, test, prod)
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  S3BucketName:
+    Description: Name of the S3 bucket where data is stored
+    Type: String
+    
+  AthenaQueryResultsLocation:
+    Description: S3 location where Athena query results will be stored
+    Type: String
+    Default: ''
+
+Conditions:
+  UseDefaultQueryResultsLocation: !Equals [!Ref AthenaQueryResultsLocation, '']
+
+Resources:
+  # Athena Workgroup
+  AthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: !Sub 'data-analytics-workgroup-${Environment}'
+      Description: !Sub 'Workgroup for data analytics POC - ${Environment}'
+      State: ENABLED
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: true
+        ResultConfiguration:
+          OutputLocation: !If 
+            - UseDefaultQueryResultsLocation
+            - !Sub 's3://${S3BucketName}/athena-results/'
+            - !Ref AthenaQueryResultsLocation
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
+        
+  # Athena Named Query to create the table
+  AthenaCreateTableQuery:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Name: !Sub 'create-clickstream-table-${Environment}'
+      Description: 'Query to create the clickstream data table'
+      Database: default
+      QueryString: !Sub |
+        CREATE EXTERNAL TABLE IF NOT EXISTS my_ingested_data (
+          element_clicked STRING,
+          time_spent INT,
+          source_menu STRING,
+          created_at STRING
+        )
+        PARTITIONED BY (
+          datehour STRING
+        )
+        ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+        WITH SERDEPROPERTIES (
+          'paths'='element_clicked, time_spent, source_menu, created_at'
+        )
+        LOCATION 's3://${S3BucketName}/'
+        TBLPROPERTIES (
+          'projection.enabled' = 'true',
+          'projection.datehour.type' = 'date',
+          'projection.datehour.format' = 'yyyy/MM/dd/HH',
+          'projection.datehour.range' = '2021/01/01/00,NOW',
+          'projection.datehour.interval' = '1',
+          'projection.datehour.interval.unit' = 'HOURS',
+          'storage.location.template' = 's3://${S3BucketName}/$${datehour}/'
+        )
+      WorkGroup: !Ref AthenaWorkGroup
+
+  # Athena Named Query to select data
+  AthenaSelectDataQuery:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Name: !Sub 'select-clickstream-data-${Environment}'
+      Description: 'Query to select all data from the clickstream table'
+      Database: default
+      QueryString: 'SELECT * FROM my_ingested_data'
+      WorkGroup: !Ref AthenaWorkGroup
+
+  # Athena Named Query for analytics
+  AthenaAnalyticsQuery:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Name: !Sub 'analyze-clickstream-data-${Environment}'
+      Description: 'Query to analyze clickstream data by element clicked'
+      Database: default
+      QueryString: |
+        SELECT 
+          element_clicked, 
+          COUNT(*) as view_count, 
+          AVG(time_spent) as avg_time_spent,
+          MIN(time_spent) as min_time_spent,
+          MAX(time_spent) as max_time_spent
+        FROM my_ingested_data
+        GROUP BY element_clicked
+        ORDER BY view_count DESC
+      WorkGroup: !Ref AthenaWorkGroup
+
+Outputs:
+  AthenaWorkGroupName:
+    Description: Name of the Athena WorkGroup
+    Value: !Ref AthenaWorkGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-AthenaWorkGroupName'
+  
+  CreateTableQueryId:
+    Description: ID of the Athena query to create the table
+    Value: !Ref AthenaCreateTableQuery
+    Export:
+      Name: !Sub '${AWS::StackName}-CreateTableQueryId'
+  
+  SelectDataQueryId:
+    Description: ID of the Athena query to select data
+    Value: !Ref AthenaSelectDataQuery
+    Export:
+      Name: !Sub '${AWS::StackName}-SelectDataQueryId'
+  
+  AnalyticsQueryId:
+    Description: ID of the Athena query for analytics
+    Value: !Ref AthenaAnalyticsQuery
+    Export:
+      Name: !Sub '${AWS::StackName}-AnalyticsQueryId'
