@@ -41,6 +41,15 @@ Resources:
       ParentId: !GetAtt OrdersAPI.RootResourceId
       PathPart: 'orders'
 
+  # Request validator for API Gateway
+  RequestValidator:
+    Type: AWS::ApiGateway::RequestValidator
+    Properties:
+      RestApiId: !Ref OrdersAPI
+      Name: !Sub 'order-request-validator-${Environment}'
+      ValidateRequestBody: true
+      ValidateRequestParameters: true
+
   # API Gateway method for POST /orders
   OrdersMethod:
     Type: AWS::ApiGateway::Method
@@ -50,6 +59,7 @@ Resources:
       HttpMethod: POST
       AuthorizationType: NONE
       ApiKeyRequired: false
+      RequestValidatorId: !Ref RequestValidator
       RequestParameters:
         method.request.header.Content-Type: false
       RequestModels:
@@ -152,6 +162,8 @@ Resources:
           MetricsEnabled: true
           DataTraceEnabled: true
           LoggingLevel: INFO
+          ThrottlingBurstLimit: 100
+          ThrottlingRateLimit: 50
       Tags:
         - Key: Environment
           Value: !Ref Environment

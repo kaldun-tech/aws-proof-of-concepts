@@ -16,11 +16,51 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: 'ClickstreamDataLifecycle'
+            Status: Enabled
+            Filter:
+              Prefix: 'data/'
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+              - TransitionInDays: 365
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: 2555  # 7 years retention for analytics data
+          - Id: 'ErrorDataLifecycle'
+            Status: Enabled
+            Filter:
+              Prefix: 'error/'
+            Transitions:
+              - TransitionInDays: 7
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 30
+                StorageClass: GLACIER
+            ExpirationInDays: 90  # Shorter retention for error data
+          - Id: 'AthenaResultsLifecycle'
+            Status: Enabled
+            Filter:
+              Prefix: 'athena-results/'
+            Transitions:
+              - TransitionInDays: 7
+                StorageClass: STANDARD_IA
+            ExpirationInDays: 30  # Short retention for query results
+          - Id: 'IncompleteMultipartUploads'
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      VersioningConfiguration:
+        Status: Enabled
       Tags:
         - Key: Project
           Value: POC-2-Data-Analytics
         - Key: ManagedBy
           Value: CloudFormation
+        - Key: CostOptimized
+          Value: 'true'
 
   DataAnalyticsBucketPolicy:
     Type: AWS::S3::BucketPolicy

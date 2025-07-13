@@ -21,12 +21,12 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: 'VisualEditor0'
+          - Sid: 'DynamoDBTableAccess'
             Effect: 'Allow'
             Action:
               - 'dynamodb:PutItem'
               - 'dynamodb:DescribeTable'
-            Resource: '*'
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ecommerce-orders-${Environment}'
 
   # Lambda-SNS-Publish policy
   LambdaSNSPublishPolicy:
@@ -37,13 +37,12 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: 'VisualEditor0'
+          - Sid: 'SNSTopicAccess'
             Effect: 'Allow'
             Action:
               - 'sns:Publish'
               - 'sns:GetTopicAttributes'
-              - 'sns:ListTopics'
-            Resource: '*'
+            Resource: !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:POC-Topic-${Environment}'
 
   # Lambda-DynamoDBStreams-Read policy
   LambdaDynamoDBStreamsReadPolicy:
@@ -54,14 +53,19 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: 'VisualEditor0'
+          - Sid: 'DynamoDBStreamAccess'
             Effect: 'Allow'
             Action:
               - 'dynamodb:GetShardIterator'
               - 'dynamodb:DescribeStream'
-              - 'dynamodb:ListStreams'
               - 'dynamodb:GetRecords'
-            Resource: '*'
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ecommerce-orders-${Environment}/stream/*'
+          - Sid: 'DynamoDBTableStreamInfo'
+            Effect: 'Allow'
+            Action:
+              - 'dynamodb:ListStreams'
+              - 'dynamodb:DescribeTable'
+            Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ecommerce-orders-${Environment}'
 
   # Lambda-Read-SQS policy
   LambdaReadSQSPolicy:
@@ -72,14 +76,14 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: 'VisualEditor0'
+          - Sid: 'SQSQueueAccess'
             Effect: 'Allow'
             Action:
               - 'sqs:DeleteMessage'
               - 'sqs:ReceiveMessage'
               - 'sqs:GetQueueAttributes'
               - 'sqs:ChangeMessageVisibility'
-            Resource: '*'
+            Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:POC-Queue-${Environment}'
 
   # Lambda basic execution role policy for CloudWatch Logs
   # In AWS Lambda best practices, it is recommended to use a managed policy for CloudWatch Logs

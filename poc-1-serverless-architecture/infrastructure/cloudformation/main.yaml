@@ -81,6 +81,25 @@ Resources:
       DependsOn:
         - SQSStack
 
+  CloudWatchStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./cloudwatch.yaml
+      Parameters:
+        Environment: !Ref Environment
+        SNSTopicARN: !GetAtt SNSStack.Outputs.TopicARN
+        APIGatewayName: 'POC-API'
+        Lambda1FunctionName: 'POC-Lambda-1'
+        Lambda2FunctionName: 'POC-Lambda-2'
+        SQSQueueName: 'POC-Queue'
+        DynamoDBTableName: 'ecommerce-orders'
+      TimeoutInMinutes: 10
+      DependsOn:
+        - SNSStack
+        - LambdaStack
+        - APIGatewayStack
+        - DynamoDBStack
+
 Outputs:
   APIEndpoint:
     Description: URL of the API Gateway endpoint

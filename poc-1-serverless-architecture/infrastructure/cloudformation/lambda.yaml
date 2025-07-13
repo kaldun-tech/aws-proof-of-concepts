@@ -52,17 +52,40 @@ Resources:
           ENVIRONMENT: !Ref Environment
       Code:
         ZipFile: |
-          import boto3, uuid
+          import boto3, uuid, os
 
           client = boto3.resource('dynamodb')
-          table = client.Table("orders")
+          table = client.Table(os.environ['DYNAMODB_TABLE'])
 
           def lambda_handler(event, context):
-          for record in event['Records']:
-              print("test")
-              payload = record["body"]
-              print(str(payload))
-              table.put_item(Item= {'orderID': str(uuid.uuid4()),'order':  payload})
+              processed_records = 0
+              failed_records = 0
+              
+              for record in event['Records']:
+                  try:
+                      print(f"Processing record: {record.get('messageId', 'unknown')}")
+                      payload = record["body"]
+                      print(f"Payload: {str(payload)}")
+                      
+                      table.put_item(Item={
+                          'orderID': str(uuid.uuid4()),
+                          'order': payload
+                      })
+                      processed_records += 1
+                      print(f"Successfully processed record")
+                      
+                  except Exception as e:
+                      failed_records += 1
+                      print(f"Error processing record: {str(e)}")
+                      # Re-raise to trigger SQS retry mechanism
+                      raise
+              
+              print(f"Batch complete. Processed: {processed_records}, Failed: {failed_records}")
+              return {
+                  'statusCode': 200,
+                  'processedRecords': processed_records,
+                  'failedRecords': failed_records
+              }
 
       Tags:
         - Key: Environment
@@ -105,24 +128,43 @@ Resources:
                   Dict containing the processing results
               """
               processed_records: List[str] = []
+              failed_records: List[str] = []
               
               for record in event["Records"]:
-                  if record['eventName'] == 'INSERT':
-                      new_record = record['dynamodb']['NewImage']
-                      
-                      # Publish to SNS
-                      response = client.publish(
-                          TopicArn=sns_topic_arn,
-                          Message=json.dumps({'default': json.dumps(new_record)}),
-                          MessageStructure='json'
-                      )
-                      
-                      processed_records.append(response['MessageId'])
+                  try:
+                      if record['eventName'] == 'INSERT':
+                          new_record = record['dynamodb']['NewImage']
+                          record_id = record.get('eventID', 'unknown')
+                          
+                          print(f"Processing DynamoDB stream record: {record_id}")
+                          
+                          # Publish to SNS
+                          response = client.publish(
+                              TopicArn=sns_topic_arn,
+                              Message=json.dumps({'default': json.dumps(new_record)}),
+                              MessageStructure='json'
+                          )
+                          
+                          processed_records.append(response['MessageId'])
+                          print(f"Successfully published to SNS. MessageId: {response['MessageId']}")
+                      else:
+                          print(f"Skipping record with eventName: {record.get('eventName', 'unknown')}")
+                          
+                  except Exception as e:
+                      record_id = record.get('eventID', 'unknown')
+                      failed_records.append(record_id)
+                      print(f"Error processing DynamoDB stream record {record_id}: {str(e)}")
+                      # Continue processing other records instead of failing the entire batch
+              
+              print(f"Batch complete. Processed: {len(processed_records)}, Failed: {len(failed_records)}")
               
               return {
                   'statusCode': 200,
                   'body': json.dumps({
-                      'processed': processed_records
+                      'processed': processed_records,
+                      'failed': failed_records,
+                      'totalProcessed': len(processed_records),
+                      'totalFailed': len(failed_records)
                   })
               }
       Tags:

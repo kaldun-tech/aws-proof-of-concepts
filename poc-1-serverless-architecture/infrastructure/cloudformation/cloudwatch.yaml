@@ -1,0 +1,286 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'E-Commerce Serverless Architecture - CloudWatch Alarms'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  SNSTopicARN:
+    Type: String
+    Description: ARN of the SNS topic for alarm notifications
+  
+  APIGatewayName:
+    Type: String
+    Description: Name of the API Gateway
+    Default: 'POC-API'
+  
+  Lambda1FunctionName:
+    Type: String
+    Description: Name of the first Lambda function
+    Default: 'POC-Lambda-1'
+  
+  Lambda2FunctionName:
+    Type: String
+    Description: Name of the second Lambda function
+    Default: 'POC-Lambda-2'
+  
+  SQSQueueName:
+    Type: String
+    Description: Name of the SQS queue
+    Default: 'POC-Queue'
+  
+  DynamoDBTableName:
+    Type: String
+    Description: Name of the DynamoDB table
+    Default: 'ecommerce-orders'
+
+Resources:
+  # API Gateway Alarms
+  APIGateway4XXErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${APIGatewayName}-${Environment}-4XX-Errors'
+      AlarmDescription: 'API Gateway 4XX errors indicate client errors'
+      MetricName: 4XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub '${APIGatewayName}-${Environment}'
+        - Name: Stage
+          Value: !Ref Environment
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  APIGateway5XXErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${APIGatewayName}-${Environment}-5XX-Errors'
+      AlarmDescription: 'API Gateway 5XX errors indicate server errors'
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub '${APIGatewayName}-${Environment}'
+        - Name: Stage
+          Value: !Ref Environment
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  APIGatewayLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${APIGatewayName}-${Environment}-High-Latency'
+      AlarmDescription: 'API Gateway latency is too high'
+      MetricName: Latency
+      Namespace: AWS/ApiGateway
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub '${APIGatewayName}-${Environment}'
+        - Name: Stage
+          Value: !Ref Environment
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  # Lambda Function Alarms
+  Lambda1ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${Lambda1FunctionName}-${Environment}-Errors'
+      AlarmDescription: 'Lambda function 1 errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${Lambda1FunctionName}-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  Lambda1DurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${Lambda1FunctionName}-${Environment}-Duration'
+      AlarmDescription: 'Lambda function 1 duration approaching timeout'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 25000  # 25 seconds (timeout is 30)
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${Lambda1FunctionName}-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  Lambda2ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${Lambda2FunctionName}-${Environment}-Errors'
+      AlarmDescription: 'Lambda function 2 errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${Lambda2FunctionName}-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  Lambda2DurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${Lambda2FunctionName}-${Environment}-Duration'
+      AlarmDescription: 'Lambda function 2 duration approaching timeout'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 25000  # 25 seconds (timeout is 30)
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${Lambda2FunctionName}-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  # SQS Alarms
+  SQSDeadLetterQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${SQSQueueName}-${Environment}-DeadLetterQueue-Messages'
+      AlarmDescription: 'Messages in dead letter queue indicate processing failures'
+      MetricName: ApproximateNumberOfVisibleMessages
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !Sub 'ecommerce-orders-dlq-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  SQSQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${SQSQueueName}-${Environment}-Queue-Depth'
+      AlarmDescription: 'High number of messages in queue indicates processing backlog'
+      MetricName: ApproximateNumberOfVisibleMessages
+      Namespace: AWS/SQS
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 100
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !Sub '${SQSQueueName}-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  # DynamoDB Alarms
+  DynamoDBThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${DynamoDBTableName}-${Environment}-Throttles'
+      AlarmDescription: 'DynamoDB table is being throttled'
+      MetricName: UserErrors
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Sub '${DynamoDBTableName}-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+  DynamoDBSystemErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${DynamoDBTableName}-${Environment}-SystemErrors'
+      AlarmDescription: 'DynamoDB table system errors'
+      MetricName: SystemErrors
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Sub '${DynamoDBTableName}-${Environment}'
+      AlarmActions:
+        - !Ref SNSTopicARN
+      TreatMissingData: notBreaching
+
+Outputs:
+  APIGateway4XXErrorAlarmArn:
+    Description: ARN of the API Gateway 4XX error alarm
+    Value: !GetAtt APIGateway4XXErrorAlarm.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGateway4XXErrorAlarmArn'
+  
+  APIGateway5XXErrorAlarmArn:
+    Description: ARN of the API Gateway 5XX error alarm
+    Value: !GetAtt APIGateway5XXErrorAlarm.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGateway5XXErrorAlarmArn'
+  
+  Lambda1ErrorAlarmArn:
+    Description: ARN of the Lambda 1 error alarm
+    Value: !GetAtt Lambda1ErrorAlarm.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda1ErrorAlarmArn'
+  
+  SQSDeadLetterQueueAlarmArn:
+    Description: ARN of the SQS dead letter queue alarm
+    Value: !GetAtt SQSDeadLetterQueueAlarm.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-SQSDeadLetterQueueAlarmArn'

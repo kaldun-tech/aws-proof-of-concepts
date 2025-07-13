@@ -38,7 +38,7 @@ param (
     [string]$S3BucketName,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("all", "iam", "dynamodb", "sqs", "lambda", "sns", "api-gateway")]
+    [ValidateSet("all", "iam", "dynamodb", "sqs", "lambda", "sns", "api-gateway", "cloudwatch")]
     [string]$Component = "all",
 
     [Parameter(Mandatory=$false)]
