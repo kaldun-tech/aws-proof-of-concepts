@@ -28,8 +28,17 @@
 .PARAMETER Component
     The specific component to deploy (all, iam, s3, cloudwatch).
 
+.PARAMETER RunTests
+    Run validation tests after deployment (default: true).
+
+.PARAMETER TestSize
+    Size of tests to run (minimal, standard, comprehensive).
+
 .EXAMPLE
     ./deploy.ps1 -Environment dev -BackupBucketName my-backup-bucket-unique-name -UserEmail user@example.com
+    
+.EXAMPLE
+    ./deploy.ps1 -Environment dev -BackupBucketName my-backup-bucket-unique-name -UserEmail user@example.com -RunTests $true -TestSize comprehensive
 #>
 
 param (
@@ -58,7 +67,14 @@ param (
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("all", "iam", "s3", "cloudwatch")]
-    [string]$Component = "all"
+    [string]$Component = "all",
+
+    [Parameter(Mandatory=$false)]
+    [bool]$RunTests = $true,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("minimal", "standard", "comprehensive")]
+    [string]$TestSize = "standard"
 )
 
 # Set error action preference
@@ -228,6 +244,118 @@ function Get-StackOutput {
     }
 }
 
+# Function to run deployment tests
+function Invoke-DeploymentTests {
+    param (
+        [string]$environment,
+        [string]$testSize
+    )
+    
+    try {
+        Write-Host "Starting deployment validation tests..." -ForegroundColor Cyan
+        
+        # Get script directory relative to current location
+        $scriptDir = $PSScriptRoot
+        $testsDir = Join-Path (Split-Path $scriptDir -Parent) ".." "tests"
+        
+        # Test 1: Infrastructure validation
+        $infraTestScript = Join-Path $testsDir "Test-Infrastructure.ps1"
+        if (Test-Path $infraTestScript) {
+            Write-Host "`nRunning infrastructure validation tests..." -ForegroundColor Yellow
+            try {
+                & $infraTestScript -Environment $environment -Region $region -Verbose
+                $infraSuccess = $LASTEXITCODE -eq 0
+                if ($infraSuccess) {
+                    Write-Host "✓ Infrastructure tests passed" -ForegroundColor Green
+                } else {
+                    Write-Host "⚠️  Infrastructure tests had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Infrastructure tests failed: $_" -ForegroundColor Red
+                $infraSuccess = $false
+            }
+        } else {
+            Write-Host "⚠️  Infrastructure test script not found: $infraTestScript" -ForegroundColor Yellow
+            $infraSuccess = $false
+        }
+        
+        # Test 2: Backup functionality (basic test)
+        $backupTestScript = Join-Path $testsDir "Test-Backup.ps1"
+        if (Test-Path $backupTestScript) {
+            Write-Host "`nRunning backup functionality tests..." -ForegroundColor Yellow
+            try {
+                & $backupTestScript -CreateTestData -CleanupTestData -Verbose
+                $backupSuccess = $LASTEXITCODE -eq 0
+                if ($backupSuccess) {
+                    Write-Host "✓ Backup tests passed" -ForegroundColor Green
+                } else {
+                    Write-Host "⚠️  Backup tests had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Backup tests failed: $_" -ForegroundColor Red
+                $backupSuccess = $false
+            }
+        } else {
+            Write-Host "⚠️  Backup test script not found: $backupTestScript" -ForegroundColor Yellow
+            $backupSuccess = $false
+        }
+        
+        # Test 3: End-to-end tests (if comprehensive)
+        $e2eSuccess = $true
+        if ($testSize -eq "comprehensive") {
+            $e2eTestScript = Join-Path $testsDir "integration" "Test-EndToEnd.ps1"
+            if (Test-Path $e2eTestScript) {
+                Write-Host "`nRunning end-to-end integration tests..." -ForegroundColor Yellow
+                try {
+                    & $e2eTestScript -Environment $environment -TestSize $testSize -CleanupAfterTest -Verbose
+                    $e2eSuccess = $LASTEXITCODE -eq 0
+                    if ($e2eSuccess) {
+                        Write-Host "✓ End-to-end tests passed" -ForegroundColor Green
+                    } else {
+                        Write-Host "⚠️  End-to-end tests had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                    }
+                } catch {
+                    Write-Host "❌ End-to-end tests failed: $_" -ForegroundColor Red
+                    $e2eSuccess = $false
+                }
+            } else {
+                Write-Host "⚠️  End-to-end test script not found: $e2eTestScript" -ForegroundColor Yellow
+                $e2eSuccess = $false
+            }
+        }
+        
+        # Test summary
+        Write-Host "`n=== TEST SUMMARY ===" -ForegroundColor Magenta
+        Write-Host "Infrastructure Tests: $(if ($infraSuccess) { '✓ PASSED' } else { '❌ FAILED' })" -ForegroundColor $(if ($infraSuccess) { 'Green' } else { 'Red' })
+        Write-Host "Backup Tests: $(if ($backupSuccess) { '✓ PASSED' } else { '❌ FAILED' })" -ForegroundColor $(if ($backupSuccess) { 'Green' } else { 'Red' })
+        if ($testSize -eq "comprehensive") {
+            Write-Host "End-to-End Tests: $(if ($e2eSuccess) { '✓ PASSED' } else { '❌ FAILED' })" -ForegroundColor $(if ($e2eSuccess) { 'Green' } else { 'Red' })
+        }
+        
+        $allTestsPassed = $infraSuccess -and $backupSuccess -and $e2eSuccess
+        
+        if ($allTestsPassed) {
+            Write-Host "`n🎉 All deployment tests passed! Your disaster recovery solution is ready to use." -ForegroundColor Green
+        } else {
+            Write-Host "`n⚠️  Some tests failed or had issues. Please review the output above." -ForegroundColor Yellow
+            Write-Host "The infrastructure is deployed, but you may want to investigate test failures." -ForegroundColor Yellow
+            Write-Host "`nTo re-run tests manually:" -ForegroundColor Cyan
+            Write-Host "  Infrastructure: $infraTestScript -Environment $environment -Region $region -Verbose"
+            Write-Host "  Backup: $backupTestScript -CreateTestData -CleanupTestData -Verbose"
+            if ($testSize -eq "comprehensive") {
+                Write-Host "  End-to-End: $e2eTestScript -Environment $environment -TestSize $testSize -Verbose"
+            }
+        }
+        
+        return $allTestsPassed
+        
+    } catch {
+        Write-Host "❌ Error running deployment tests: $_" -ForegroundColor Red
+        Write-Host "The infrastructure is deployed, but test validation failed." -ForegroundColor Yellow
+        return $false
+    }
+}
+
 # Main deployment logic
 try {
     Write-Host "Starting Disaster Recovery POC deployment..." -ForegroundColor Cyan
@@ -236,6 +364,8 @@ try {
     Write-Host "Region: $region"
     Write-Host "Component: $Component"
     Write-Host "Retention Years: $RetentionYears"
+    Write-Host "Run Tests: $RunTests"
+    Write-Host "Test Size: $TestSize"
     Write-Host ""
 
     # S3 bucket for CloudFormation templates
@@ -293,6 +423,18 @@ try {
             Write-Host "3. Edit backup-config.json with your file paths"
             Write-Host "4. Run initial backup:"
             Write-Host "   ./infrastructure/scripts/backup.ps1 -ConfigFile backup-config.json"
+            
+            # Run tests if requested
+            if ($RunTests) {
+                Write-Host "`n=== RUNNING DEPLOYMENT TESTS ===" -ForegroundColor Magenta
+                Invoke-DeploymentTests -environment $Environment -testSize $TestSize
+            } else {
+                Write-Host "`n=== TESTS SKIPPED ===" -ForegroundColor Yellow
+                Write-Host "Tests were skipped. To run tests manually:"
+                Write-Host "   ./tests/Test-Infrastructure.ps1 -Environment $Environment -Verbose"
+                Write-Host "   ./tests/Test-Backup.ps1 -CreateTestData -Verbose"
+                Write-Host "   ./tests/integration/Test-EndToEnd.ps1 -Environment $Environment -TestSize $TestSize -Verbose"
+            }
         }
     } else {
         Write-Host "Individual component deployment not implemented yet. Please use 'all' for now."
