@@ -30,8 +30,17 @@
 .PARAMETER RunTests
     Whether to run tests after deployment. Default is $true.
 
+.PARAMETER TestSize
+    Size of tests to run (minimal, standard, comprehensive). Default is standard.
+
+.PARAMETER IncludeFailoverTest
+    Include failover testing (will terminate instances for testing). Default is $false.
+
 .EXAMPLE
     .\deploy.ps1 -Environment dev -EmailAddress user@example.com -S3BucketName my-bucket
+    
+.EXAMPLE
+    .\deploy.ps1 -Environment dev -EmailAddress user@example.com -S3BucketName my-bucket -RunTests $true -TestSize comprehensive -IncludeFailoverTest
 #>
 
 param(
@@ -56,7 +65,14 @@ param(
     [string]$Component = "all",
 
     [Parameter(Mandatory=$false)]
-    [bool]$RunTests = $true
+    [bool]$RunTests = $true,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("minimal", "standard", "comprehensive")]
+    [string]$TestSize = "standard",
+
+    [Parameter(Mandatory=$false)]
+    [bool]$IncludeFailoverTest = $false
 )
 
 # Set error action preference
@@ -242,9 +258,156 @@ function New-WebAppStack {
     }
 }
 
-# Function to run tests
+# Function to run comprehensive tests
+function Invoke-ComprehensiveTests {
+    param (
+        [string]$testSize,
+        [bool]$includeFailoverTest
+    )
+    
+    try {
+        Write-Host "Starting comprehensive deployment validation tests..." -ForegroundColor Cyan
+        
+        # Get script directory relative to current location
+        $scriptDir = $PSScriptRoot
+        $testsDir = Join-Path (Split-Path $scriptDir -Parent) ".." "tests"
+        
+        # Test 1: Infrastructure validation
+        $infraTestScript = Join-Path $testsDir "Test-Infrastructure.ps1"
+        if (Test-Path $infraTestScript) {
+            Write-Host "`nRunning infrastructure validation tests..." -ForegroundColor Yellow
+            try {
+                & $infraTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose
+                $infraSuccess = $LASTEXITCODE -eq 0
+                if ($infraSuccess) {
+                    Write-Host "✓ Infrastructure tests passed" -ForegroundColor Green
+                } else {
+                    Write-Host "⚠️  Infrastructure tests had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Infrastructure tests failed: $_" -ForegroundColor Red
+                $infraSuccess = $false
+            }
+        } else {
+            Write-Host "⚠️  Infrastructure test script not found: $infraTestScript" -ForegroundColor Yellow
+            $infraSuccess = $false
+        }
+        
+        # Test 2: Load balancer and reliability tests
+        $lbTestScript = Join-Path $testsDir "Test-LoadBalancerReliability.ps1"
+        if (Test-Path $lbTestScript) {
+            Write-Host "`nRunning load balancer and reliability tests..." -ForegroundColor Yellow
+            try {
+                if ($includeFailoverTest) {
+                    & $lbTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -TestFailover -Verbose
+                } else {
+                    & $lbTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose
+                }
+                $lbSuccess = $LASTEXITCODE -eq 0
+                if ($lbSuccess) {
+                    Write-Host "✓ Load balancer and reliability tests passed" -ForegroundColor Green
+                } else {
+                    Write-Host "⚠️  Load balancer tests had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Load balancer tests failed: $_" -ForegroundColor Red
+                $lbSuccess = $false
+            }
+        } else {
+            Write-Host "⚠️  Load balancer test script not found: $lbTestScript" -ForegroundColor Yellow
+            $lbSuccess = $false
+        }
+        
+        # Test 3: Database connectivity tests
+        $dbTestScript = Join-Path $testsDir "Test-DatabaseConnectivity.ps1"
+        if (Test-Path $dbTestScript) {
+            Write-Host "`nRunning database connectivity tests..." -ForegroundColor Yellow
+            try {
+                if ($testSize -eq "comprehensive") {
+                    & $dbTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -TestDataOperations -Verbose
+                } else {
+                    & $dbTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose
+                }
+                $dbSuccess = $LASTEXITCODE -eq 0
+                if ($dbSuccess) {
+                    Write-Host "✓ Database connectivity tests passed" -ForegroundColor Green
+                } else {
+                    Write-Host "⚠️  Database tests had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Database tests failed: $_" -ForegroundColor Red
+                $dbSuccess = $false
+            }
+        } else {
+            Write-Host "⚠️  Database test script not found: $dbTestScript" -ForegroundColor Yellow
+            $dbSuccess = $false
+        }
+        
+        # Test 4: End-to-end integration tests (if comprehensive or standard)
+        $e2eSuccess = $true
+        if ($testSize -in @("standard", "comprehensive")) {
+            $e2eTestScript = Join-Path $testsDir "integration" "Test-EndToEnd.ps1"
+            if (Test-Path $e2eTestScript) {
+                Write-Host "`nRunning end-to-end integration tests..." -ForegroundColor Yellow
+                try {
+                    if ($includeFailoverTest) {
+                        & $e2eTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -TestSize $testSize -IncludeFailoverTest -CleanupAfterTest -Verbose
+                    } else {
+                        & $e2eTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -TestSize $testSize -CleanupAfterTest -Verbose
+                    }
+                    $e2eSuccess = $LASTEXITCODE -eq 0
+                    if ($e2eSuccess) {
+                        Write-Host "✓ End-to-end tests passed" -ForegroundColor Green
+                    } else {
+                        Write-Host "⚠️  End-to-end tests had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                    }
+                } catch {
+                    Write-Host "❌ End-to-end tests failed: $_" -ForegroundColor Red
+                    $e2eSuccess = $false
+                }
+            } else {
+                Write-Host "⚠️  End-to-end test script not found: $e2eTestScript" -ForegroundColor Yellow
+                $e2eSuccess = $false
+            }
+        }
+        
+        # Test summary
+        Write-Host "`n=== DEPLOYMENT TEST SUMMARY ===" -ForegroundColor Magenta
+        Write-Host "Infrastructure Tests: $(if ($infraSuccess) { '✓ PASSED' } else { '❌ FAILED' })" -ForegroundColor $(if ($infraSuccess) { 'Green' } else { 'Red' })
+        Write-Host "Load Balancer Tests: $(if ($lbSuccess) { '✓ PASSED' } else { '❌ FAILED' })" -ForegroundColor $(if ($lbSuccess) { 'Green' } else { 'Red' })
+        Write-Host "Database Tests: $(if ($dbSuccess) { '✓ PASSED' } else { '❌ FAILED' })" -ForegroundColor $(if ($dbSuccess) { 'Green' } else { 'Red' })
+        if ($testSize -in @("standard", "comprehensive")) {
+            Write-Host "End-to-End Tests: $(if ($e2eSuccess) { '✓ PASSED' } else { '❌ FAILED' })" -ForegroundColor $(if ($e2eSuccess) { 'Green' } else { 'Red' })
+        }
+        
+        $allTestsPassed = $infraSuccess -and $lbSuccess -and $dbSuccess -and $e2eSuccess
+        
+        if ($allTestsPassed) {
+            Write-Host "`n🎉 All deployment tests passed! Your multi-tier infrastructure is ready for use." -ForegroundColor Green
+        } else {
+            Write-Host "`n⚠️  Some tests failed or had issues. Please review the output above." -ForegroundColor Yellow
+            Write-Host "The infrastructure is deployed, but you may want to investigate test failures." -ForegroundColor Yellow
+            Write-Host "`nTo re-run tests manually:" -ForegroundColor Cyan
+            Write-Host "  Infrastructure: $infraTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose"
+            Write-Host "  Load Balancer: $lbTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose"
+            Write-Host "  Database: $dbTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose"
+            if ($testSize -in @("standard", "comprehensive")) {
+                Write-Host "  End-to-End: $e2eTestScript -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -TestSize $testSize -Verbose"
+            }
+        }
+        
+        return $allTestsPassed
+        
+    } catch {
+        Write-Host "❌ Error running deployment tests: $_" -ForegroundColor Red
+        Write-Host "The infrastructure is deployed, but test validation failed." -ForegroundColor Yellow
+        return $false
+    }
+}
+
+# Legacy function for backward compatibility
 function Invoke-Tests {
-    Write-Host "Running tests for the deployed infrastructure..."
+    Write-Host "Running basic website availability test..." -ForegroundColor Yellow
     
     # Get the WebsiteURL output from the WebApp stack
     $webAppStackName = "$StackNamePrefix-WebApp"
@@ -259,18 +422,18 @@ function Invoke-Tests {
             $statusCode = $response.StatusCode
             
             if ($statusCode -eq 200) {
-                Write-Host "Website is accessible. Status code: $statusCode" -ForegroundColor Green
+                Write-Host "✓ Website is accessible. Status code: $statusCode" -ForegroundColor Green
             } else {
-                Write-Host "Website returned non-200 status code: $statusCode" -ForegroundColor Yellow
+                Write-Host "⚠️  Website returned non-200 status code: $statusCode" -ForegroundColor Yellow
             }
         } catch {
-            Write-Host "Failed to access website: $_" -ForegroundColor Red
+            Write-Host "❌ Failed to access website: $_" -ForegroundColor Red
         }
     } else {
-        Write-Host "WebsiteURL output not found in stack outputs." -ForegroundColor Yellow
+        Write-Host "⚠️  WebsiteURL output not found in stack outputs." -ForegroundColor Yellow
     }
     
-    Write-Host "Tests completed."
+    Write-Host "Basic test completed. Use -TestSize standard or comprehensive for full testing."
 }
 
 # Main deployment logic
@@ -280,6 +443,9 @@ try {
     Write-Host "Region: $Region"
     Write-Host "Stack Name Prefix: $StackNamePrefix"
     Write-Host "Component: $Component"
+    Write-Host "Run Tests: $RunTests"
+    Write-Host "Test Size: $TestSize"
+    Write-Host "Include Failover Test: $IncludeFailoverTest"
     
     # Upload templates to S3
     Upload-TemplatesToS3 -BucketName $S3BucketName
@@ -305,7 +471,20 @@ try {
     
     # Run tests if requested
     if ($RunTests) {
-        Invoke-Tests
+        if ($TestSize -ne "minimal" -or $IncludeFailoverTest) {
+            Write-Host "`n=== RUNNING DEPLOYMENT TESTS ===" -ForegroundColor Magenta
+            Invoke-ComprehensiveTests -testSize $TestSize -includeFailoverTest $IncludeFailoverTest
+        } else {
+            Write-Host "`n=== RUNNING BASIC TESTS ===" -ForegroundColor Magenta
+            Invoke-Tests
+        }
+    } else {
+        Write-Host "`n=== TESTS SKIPPED ===" -ForegroundColor Yellow
+        Write-Host "Tests were skipped. To run tests manually:"
+        Write-Host "  Basic: ./tests/Test-Infrastructure.ps1 -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose"
+        Write-Host "  Load Balancer: ./tests/Test-LoadBalancerReliability.ps1 -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose"
+        Write-Host "  Database: ./tests/Test-DatabaseConnectivity.ps1 -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -Verbose"
+        Write-Host "  End-to-End: ./tests/integration/Test-EndToEnd.ps1 -Environment $Environment -StackNamePrefix $StackNamePrefix -Region $Region -TestSize $TestSize -Verbose"
     }
     
     Write-Host "Deployment completed successfully." -ForegroundColor Green
