@@ -1,15 +1,16 @@
 # AWS Proof of Concepts
 
-This repository contains four proof of concept (POC) implementations for AWS solutions architecture patterns. Each POC demonstrates a different architectural approach to solving common cloud challenges.
+This repository contains five proof of concept (POC) implementations for AWS solutions architecture patterns. Each POC demonstrates a different architectural approach to solving common cloud challenges.
 
 ## Repository Structure
 
 ```
 aws-proof-of-concepts/
-├── poc-1-serverless-architecture/     # Serverless application architecture
-├── poc-2-containerized-microservices/ # Container-based microservices
-├── poc-3-data-lake-analytics/         # Data lake and analytics platform
-├── poc-4-hybrid-cloud-connectivity/   # Hybrid cloud connectivity solution
+├── poc-1-serverless-architecture/     # Serverless e-commerce backend
+├── poc-2-data-analytics/              # Clickstream data analytics pipeline
+├── poc-3-reliable-multi-tier/         # Multi-tier web application infrastructure
+├── poc-4-migration-analytics/         # On-premises to AWS migration strategy
+├── poc-5-disaster-recovery/           # Personal computer disaster recovery backup
 └── README.md                          # This file
 ```
 
@@ -24,21 +25,25 @@ Each proof of concept is implemented using:
 
 ## Proof of Concepts
 
-### POC 1: Serverless Architecture
+### POC 1: Serverless E-Commerce Architecture
 
-A serverless application architecture using AWS Lambda, API Gateway, DynamoDB, and other serverless services.
+A serverless e-commerce backend using AWS Lambda, API Gateway, SQS, DynamoDB, and SNS. Demonstrates event-driven architecture with automatic scaling, fault tolerance, and cost optimization.
 
-### POC 2: Data Analytics
+### POC 2: Data Analytics Pipeline
 
-A data analytics solution using Amazon API Gateway, Lambda, Kinesis Data Firehose, S3, Athena, and QuickSight to ingest, store, and visualize clickstream data.
+A clickstream data analytics solution using Amazon API Gateway, Lambda, Kinesis Data Firehose, S3, Athena, and QuickSight to ingest, store, and visualize restaurant menu interaction data.
 
-### POC 3: Data Lake Analytics
+### POC 3: Reliable Multi-Tier Infrastructure
 
-A data lake solution using S3, Athena, Glue, and other AWS analytics services.
+A highly available multi-tier web application infrastructure using VPC, Application Load Balancer, Auto Scaling Groups, and DynamoDB. Demonstrates AWS reliability best practices across multiple Availability Zones.
 
-### POC 4: Hybrid Cloud Connectivity
+### POC 4: On-Premises Migration Strategy
 
-A hybrid cloud connectivity solution using VPC, Direct Connect, Transit Gateway, and related networking services.
+Comprehensive migration planning documentation for moving three-tier web applications and Hadoop analytics workloads from on-premises to AWS, covering lift-and-shift vs re-platforming approaches.
+
+### POC 5: Personal Disaster Recovery
+
+A cost-effective personal computer backup solution using S3 Glacier Deep Archive storage. Includes automated backup scripts, restore workflows, and monitoring for long-term data protection at approximately $1/TB/month.
 
 ## Getting Started
 

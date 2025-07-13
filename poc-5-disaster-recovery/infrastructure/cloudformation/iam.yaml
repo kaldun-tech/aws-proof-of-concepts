@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Disaster Recovery POC - IAM Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  BackupBucketName:
+    Type: String
+    Description: Name of the S3 bucket for backups
+
+Resources:
+  # IAM User for backup operations
+  BackupUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub 'disaster-recovery-backup-user-${Environment}'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: DisasterRecoveryBackup
+
+  # IAM Policy for backup operations
+  BackupUserPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub 'DisasterRecoveryBackupPolicy-${Environment}'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # S3 Bucket access
+          - Sid: 'S3BucketAccess'
+            Effect: 'Allow'
+            Action:
+              - 's3:ListBucket'
+              - 's3:GetBucketLocation'
+              - 's3:GetBucketVersioning'
+              - 's3:ListBucketVersions'
+              - 's3:ListBucketMultipartUploads'
+            Resource: !Sub 'arn:aws:s3:::${BackupBucketName}'
+          
+          # S3 Object operations
+          - Sid: 'S3ObjectAccess'
+            Effect: 'Allow'
+            Action:
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+              - 's3:PutObject'
+              - 's3:PutObjectAcl'
+              - 's3:DeleteObject'
+              - 's3:DeleteObjectVersion'
+              - 's3:RestoreObject'
+              - 's3:AbortMultipartUpload'
+              - 's3:ListMultipartUploadParts'
+            Resource: !Sub 'arn:aws:s3:::${BackupBucketName}/*'
+          
+          # Glacier operations
+          - Sid: 'GlacierAccess'
+            Effect: 'Allow'
+            Action:
+              - 'glacier:InitiateJob'
+              - 'glacier:DescribeJob'
+              - 'glacier:GetJobOutput'
+              - 'glacier:ListJobs'
+            Resource: '*'
+          
+          # CloudWatch Logs for backup monitoring
+          - Sid: 'CloudWatchLogsAccess'
+            Effect: 'Allow'
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+              - 'logs:DescribeLogGroups'
+              - 'logs:DescribeLogStreams'
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/s3/disaster-recovery-*'
+      Users:
+        - !Ref BackupUser
+
+  # Access Keys for the backup user
+  BackupUserAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref BackupUser
+
+  # IAM Role for S3 to access CloudWatch
+  S3LoggingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'S3-CloudWatch-Logging-Role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'CloudWatchLogsPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/s3/disaster-recovery-*'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  BackupUserName:
+    Description: Name of the IAM user for backup operations
+    Value: !Ref BackupUser
+    Export:
+      Name: !Sub '${AWS::StackName}-BackupUserName'
+  
+  BackupUserArn:
+    Description: ARN of the IAM user for backup operations
+    Value: !GetAtt BackupUser.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BackupUserArn'
+  
+  AccessKeyId:
+    Description: Access Key ID for the backup user
+    Value: !Ref BackupUserAccessKey
+    Export:
+      Name: !Sub '${AWS::StackName}-AccessKeyId'
+  
+  SecretAccessKey:
+    Description: Secret Access Key for the backup user
+    Value: !GetAtt BackupUserAccessKey.SecretAccessKey
+    Export:
+      Name: !Sub '${AWS::StackName}-SecretAccessKey'
+  
+  S3LoggingRoleArn:
+    Description: ARN of the S3 logging role
+    Value: !GetAtt S3LoggingRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-S3LoggingRoleArn'

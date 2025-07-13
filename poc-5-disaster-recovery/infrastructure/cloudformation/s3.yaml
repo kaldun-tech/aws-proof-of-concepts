@@ -1,0 +1,264 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Disaster Recovery POC - S3 Storage Resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  BackupBucketName:
+    Type: String
+    Description: Name of the S3 bucket for backups (must be globally unique)
+    AllowedPattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$'
+    ConstraintDescription: 'Bucket name must be lowercase, contain only letters, numbers, and hyphens'
+  
+  RetentionYears:
+    Type: Number
+    Default: 7
+    Description: Number of years to retain backups
+    MinValue: 1
+    MaxValue: 10
+  
+  BackupUserArn:
+    Type: String
+    Description: ARN of the IAM user for backup operations
+
+Resources:
+  # S3 Bucket for disaster recovery backups
+  DisasterRecoveryBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BackupBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          # Backup files lifecycle
+          - Id: 'BackupFilesLifecycle'
+            Status: Enabled
+            Filter:
+              Prefix: 'backups/'
+            Transitions:
+              # Immediate transition to Deep Archive for cost savings
+              - TransitionInDays: 0
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref RetentionYears
+            NoncurrentVersionTransitions:
+              - TransitionInDays: 0
+                StorageClass: DEEP_ARCHIVE
+            NoncurrentVersionExpirationInDays: !Ref RetentionYears
+          
+          # Restore staging area (Standard storage for downloaded files)
+          - Id: 'RestoreStagingLifecycle'
+            Status: Enabled
+            Filter:
+              Prefix: 'restore-staging/'
+            Transitions:
+              - TransitionInDays: 7
+                StorageClass: STANDARD_IA
+            ExpirationInDays: 30  # Clean up restore staging after 30 days
+          
+          # Backup metadata and logs
+          - Id: 'MetadataLifecycle'
+            Status: Enabled
+            Filter:
+              Prefix: 'metadata/'
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+            ExpirationInDays: !Ref RetentionYears
+          
+          # Cleanup incomplete multipart uploads
+          - Id: 'IncompleteMultipartUploads'
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogsBucket
+        LogFilePrefix: 'disaster-recovery-access-logs/'
+      
+      NotificationConfiguration:
+        CloudWatchConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            CloudWatchConfiguration:
+              LogGroupName: !Sub '/aws/s3/disaster-recovery-${Environment}'
+          - Event: 's3:ObjectRemoved:*'
+            CloudWatchConfiguration:
+              LogGroupName: !Sub '/aws/s3/disaster-recovery-${Environment}'
+      
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: DisasterRecoveryBackup
+        - Key: CostCenter
+          Value: PersonalBackup
+
+  # Separate bucket for S3 access logs
+  AccessLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${BackupBucketName}-access-logs'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: 'AccessLogsLifecycle'
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+            ExpirationInDays: 365
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: AccessLogging
+
+  # Bucket policy for backup user access
+  DisasterRecoveryBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DisasterRecoveryBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Allow backup user full access
+          - Sid: 'BackupUserAccess'
+            Effect: 'Allow'
+            Principal:
+              AWS: !Ref BackupUserArn
+            Action:
+              - 's3:ListBucket'
+              - 's3:GetBucketLocation'
+              - 's3:GetBucketVersioning'
+              - 's3:ListBucketVersions'
+              - 's3:ListBucketMultipartUploads'
+            Resource: !Sub '${DisasterRecoveryBucket.Arn}'
+          
+          - Sid: 'BackupUserObjectAccess'
+            Effect: 'Allow'
+            Principal:
+              AWS: !Ref BackupUserArn
+            Action:
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+              - 's3:PutObject'
+              - 's3:PutObjectAcl'
+              - 's3:DeleteObject'
+              - 's3:DeleteObjectVersion'
+              - 's3:RestoreObject'
+              - 's3:AbortMultipartUpload'
+              - 's3:ListMultipartUploadParts'
+            Resource: !Sub '${DisasterRecoveryBucket.Arn}/*'
+          
+          # Deny public access
+          - Sid: 'DenyPublicAccess'
+            Effect: 'Deny'
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Sub '${DisasterRecoveryBucket.Arn}'
+              - !Sub '${DisasterRecoveryBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                'aws:PrincipalArn': !Ref BackupUserArn
+
+  # CloudWatch Log Group for S3 events
+  S3EventLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/s3/disaster-recovery-${Environment}'
+      RetentionInDays: 90
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # S3 Inventory configuration for backup verification
+  BackupInventory:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${BackupBucketName}-inventory'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: 'InventoryLifecycle'
+            Status: Enabled
+            ExpirationInDays: 90
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: BackupInventory
+
+Outputs:
+  BucketName:
+    Description: Name of the disaster recovery S3 bucket
+    Value: !Ref DisasterRecoveryBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+  
+  BucketArn:
+    Description: ARN of the disaster recovery S3 bucket
+    Value: !GetAtt DisasterRecoveryBucket.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketArn'
+  
+  BucketDomainName:
+    Description: Domain name of the disaster recovery S3 bucket
+    Value: !GetAtt DisasterRecoveryBucket.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketDomainName'
+  
+  AccessLogsBucketName:
+    Description: Name of the access logs S3 bucket
+    Value: !Ref AccessLogsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-AccessLogsBucketName'
+  
+  InventoryBucketName:
+    Description: Name of the inventory S3 bucket
+    Value: !Ref BackupInventory
+    Export:
+      Name: !Sub '${AWS::StackName}-InventoryBucketName'
+  
+  LogGroupName:
+    Description: Name of the CloudWatch log group
+    Value: !Ref S3EventLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroupName'

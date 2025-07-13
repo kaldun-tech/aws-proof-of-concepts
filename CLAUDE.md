@@ -26,6 +26,7 @@ poc-{n}-{name}/
 2. **POC 2: Data Analytics** - Clickstream analytics pipeline with API Gateway, Lambda, Kinesis Firehose, S3, Athena, QuickSight
 3. **POC 3: Reliable Multi-Tier** - Highly available web application with VPC, ELB, Auto Scaling, Aurora
 4. **POC 4: Migration Analytics** - On-premises to AWS migration strategy (documentation only)
+5. **POC 5: Disaster Recovery** - Personal computer backup solution using S3 Glacier Deep Archive with automated scripts
 
 ## Deployment Commands
 
@@ -63,9 +64,10 @@ cd poc-{n}-{name}/infrastructure/scripts
 
 ### POC-Specific Components
 
-**POC 1:** iam, dynamodb, sqs, lambda, sns, api-gateway
+**POC 1:** iam, dynamodb, sqs, lambda, sns, api-gateway, cloudwatch
 **POC 2:** iam, s3, lambda, firehose, api-gateway, athena, quicksight
 **POC 3:** vpc, staticwebapp
+**POC 5:** iam, s3, cloudwatch (all deployed together)
 
 ## Infrastructure as Code
 
@@ -172,6 +174,38 @@ Access test results through CloudWatch logs and POC-specific validation endpoint
 
 ### POC 4: Migration Strategy (Documentation)
 Comprehensive migration planning from on-premises to AWS covering lift-and-shift vs re-platforming approaches for three-tier web applications and Hadoop analytics workloads.
+
+### POC 5: Personal Disaster Recovery
+
+**Backup Architecture:**
+1. PowerShell scripts discover and compress files based on JSON configuration
+2. Automated upload to S3 with immediate transition to Glacier Deep Archive
+3. CloudWatch logging and monitoring of backup operations
+4. SNS notifications for backup success/failure and cost alerts
+
+**Key Components:**
+- **S3 Bucket**: Main backup storage with Glacier Deep Archive lifecycle (immediate transition)
+- **IAM User**: Dedicated backup user with least-privilege permissions for S3 operations
+- **Lifecycle Policies**: 
+  - Backup files: Immediate Deep Archive transition, 7-year retention
+  - Error logs: 90-day retention with IA/Glacier transitions
+  - Restore staging: 30-day cleanup of restored files
+- **CloudWatch Monitoring**: Backup operations logging, cost alerts, and dashboard
+- **Restore Process**: Glacier retrieval jobs with standard (12h), expedited (1-5m), or bulk (5-12h) options
+
+**Cost Optimization:**
+- Immediate Deep Archive transition for ~$1/TB/month storage cost
+- Automated cleanup of incomplete multipart uploads
+- Separate retention policies for different data types
+- Cost threshold alerts via CloudWatch
+
+**Restore Workflow:**
+1. Initiate Glacier retrieval job via PowerShell script
+2. Monitor job status (restoration takes 1-5 minutes to 12 hours depending on type)
+3. Download restored files to local staging area
+4. Files automatically removed from S3 after specified days (1-7)
+
+**Backup Configuration**: JSON-based configuration supports multiple source paths, include/exclude patterns, compression settings, and retention policies for flexible personal backup strategies.
 
 ## CloudFormation Template Patterns
 

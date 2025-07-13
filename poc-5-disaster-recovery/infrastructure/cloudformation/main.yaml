@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Disaster Recovery POC - Main Stack'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  BackupBucketName:
+    Type: String
+    Description: Name of the S3 bucket for backups (must be globally unique)
+    AllowedPattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$'
+    ConstraintDescription: 'Bucket name must be lowercase, contain only letters, numbers, and hyphens'
+  
+  UserEmail:
+    Type: String
+    Description: Email address for backup notifications
+    AllowedPattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+  
+  RetentionYears:
+    Type: Number
+    Default: 7
+    Description: Number of years to retain backups
+    MinValue: 1
+    MaxValue: 10
+  
+  CostThresholdUSD:
+    Type: Number
+    Default: 50
+    Description: Monthly cost threshold for alerts (USD)
+    MinValue: 1
+    MaxValue: 1000
+
+Resources:
+  # IAM Stack - Deploy first to create user and roles
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./iam.yaml
+      Parameters:
+        Environment: !Ref Environment
+        BackupBucketName: !Ref BackupBucketName
+      TimeoutInMinutes: 10
+
+  # S3 Stack - Deploy after IAM to reference user ARN
+  S3Stack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./s3.yaml
+      Parameters:
+        Environment: !Ref Environment
+        BackupBucketName: !Ref BackupBucketName
+        RetentionYears: !Ref RetentionYears
+        BackupUserArn: !GetAtt IAMStack.Outputs.BackupUserArn
+      TimeoutInMinutes: 15
+      DependsOn:
+        - IAMStack
+
+  # CloudWatch Stack - Deploy last for monitoring
+  CloudWatchStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./cloudwatch.yaml
+      Parameters:
+        Environment: !Ref Environment
+        BackupBucketName: !Ref BackupBucketName
+        UserEmail: !Ref UserEmail
+        CostThresholdUSD: !Ref CostThresholdUSD
+      TimeoutInMinutes: 10
+      DependsOn:
+        - S3Stack
+        - IAMStack
+
+Outputs:
+  # Infrastructure Information
+  BackupBucketName:
+    Description: Name of the backup S3 bucket
+    Value: !GetAtt S3Stack.Outputs.BucketName
+  
+  BackupBucketArn:
+    Description: ARN of the backup S3 bucket
+    Value: !GetAtt S3Stack.Outputs.BucketArn
+  
+  # IAM Credentials (Handle securely)
+  BackupUserName:
+    Description: Name of the IAM user for backup operations
+    Value: !GetAtt IAMStack.Outputs.BackupUserName
+  
+  AccessKeyId:
+    Description: Access Key ID for the backup user
+    Value: !GetAtt IAMStack.Outputs.AccessKeyId
+  
+  SecretAccessKey:
+    Description: Secret Access Key for the backup user (store securely)
+    Value: !GetAtt IAMStack.Outputs.SecretAccessKey
+  
+  # Monitoring Resources
+  NotificationTopicArn:
+    Description: ARN of the SNS topic for notifications
+    Value: !GetAtt CloudWatchStack.Outputs.NotificationTopicArn
+  
+  DashboardURL:
+    Description: URL of the CloudWatch dashboard
+    Value: !GetAtt CloudWatchStack.Outputs.DashboardURL
+  
+  # Log Groups
+  BackupLogGroupName:
+    Description: Name of the backup operations log group
+    Value: !GetAtt CloudWatchStack.Outputs.BackupLogGroupName
+  
+  RestoreLogGroupName:
+    Description: Name of the restore operations log group
+    Value: !GetAtt CloudWatchStack.Outputs.RestoreLogGroupName
+  
+  # Configuration Summary
+  DeploymentSummary:
+    Description: Summary of deployed resources
+    Value: !Sub |
+      Disaster Recovery Infrastructure Deployed Successfully
+      
+      Environment: ${Environment}
+      Backup Bucket: ${BackupBucketName}
+      Retention Period: ${RetentionYears} years
+      Cost Alert Threshold: $${CostThresholdUSD} USD/month
+      Notification Email: ${UserEmail}
+      
+      Next Steps:
+      1. Configure AWS CLI with the provided credentials
+      2. Download and configure backup scripts
+      3. Run initial backup test
+      4. Set up backup scheduling
+      
+      Dashboard: ${CloudWatchStack.Outputs.DashboardURL}

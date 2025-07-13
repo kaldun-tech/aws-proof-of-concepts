@@ -1,0 +1,295 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Disaster Recovery POC - CloudWatch Monitoring'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  
+  BackupBucketName:
+    Type: String
+    Description: Name of the backup S3 bucket
+  
+  UserEmail:
+    Type: String
+    Description: Email address for backup notifications
+    AllowedPattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+  
+  CostThresholdUSD:
+    Type: Number
+    Default: 50
+    Description: Monthly cost threshold for alerts (USD)
+    MinValue: 1
+    MaxValue: 1000
+
+Resources:
+  # SNS Topic for backup notifications
+  BackupNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'disaster-recovery-notifications-${Environment}'
+      DisplayName: 'Disaster Recovery Backup Notifications'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Email subscription for notifications
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref BackupNotificationTopic
+      Protocol: email
+      Endpoint: !Ref UserEmail
+
+  # CloudWatch Alarm for backup failures
+  BackupFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'DisasterRecovery-${Environment}-BackupFailures'
+      AlarmDescription: 'Alerts when backup operations fail'
+      MetricName: 4XXError
+      Namespace: AWS/S3
+      Statistic: Sum
+      Period: 3600  # 1 hour
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: BucketName
+          Value: !Ref BackupBucketName
+      AlarmActions:
+        - !Ref BackupNotificationTopic
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for high storage costs
+  StorageCostAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'DisasterRecovery-${Environment}-HighStorageCosts'
+      AlarmDescription: 'Alerts when storage costs exceed threshold'
+      MetricName: EstimatedCharges
+      Namespace: AWS/Billing
+      Statistic: Maximum
+      Period: 86400  # 24 hours
+      EvaluationPeriods: 1
+      Threshold: !Ref CostThresholdUSD
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ServiceName
+          Value: AmazonS3
+        - Name: Currency
+          Value: USD
+      AlarmActions:
+        - !Ref BackupNotificationTopic
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for backup frequency
+  BackupFrequencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'DisasterRecovery-${Environment}-BackupFrequency'
+      AlarmDescription: 'Alerts when no backups have been created in 48 hours'
+      MetricName: NumberOfObjects
+      Namespace: AWS/S3
+      Statistic: Maximum
+      Period: 86400  # 24 hours
+      EvaluationPeriods: 2  # 48 hours
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: BucketName
+          Value: !Ref BackupBucketName
+        - Name: StorageType
+          Value: AllStorageTypes
+      AlarmActions:
+        - !Ref BackupNotificationTopic
+      TreatMissingData: breaching
+
+  # CloudWatch Dashboard for backup monitoring
+  BackupDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'DisasterRecovery-${Environment}-Dashboard'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/S3", "BucketSizeBytes", "BucketName", "${BackupBucketName}", "StorageType", "DeepArchiveStorage" ],
+                  [ "...", "StandardStorage" ],
+                  [ "...", "StandardIAStorage" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Backup Storage Usage",
+                "period": 86400,
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/S3", "NumberOfObjects", "BucketName", "${BackupBucketName}", "StorageType", "AllStorageTypes" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Number of Backup Files",
+                "period": 86400,
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/S3", "AllRequests", "BucketName", "${BackupBucketName}" ],
+                  [ ".", "PutRequests", ".", "." ],
+                  [ ".", "GetRequests", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "S3 API Requests",
+                "period": 3600
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/S3", "4xxErrors", "BucketName", "${BackupBucketName}" ],
+                  [ ".", "5xxErrors", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "S3 Errors",
+                "period": 3600,
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 12,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/s3/disaster-recovery-${Environment}'\n| fields @timestamp, eventName, sourceIPAddress, userIdentity.type\n| filter eventName like /Put/\n| sort @timestamp desc\n| limit 20",
+                "region": "${AWS::Region}",
+                "title": "Recent Backup Operations",
+                "view": "table"
+              }
+            }
+          ]
+        }
+
+  # CloudWatch Log Group for backup operations
+  BackupOperationsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/disaster-recovery/backup-operations-${Environment}'
+      RetentionInDays: 90
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudWatch Log Group for restore operations
+  RestoreOperationsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/disaster-recovery/restore-operations-${Environment}'
+      RetentionInDays: 90
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudWatch Insights queries for backup analysis
+  BackupInsightsQuery:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: !Sub 'DisasterRecovery-${Environment}-BackupSummary'
+      LogGroupNames:
+        - !Ref BackupOperationsLogGroup
+      QueryString: |
+        fields @timestamp, operation, status, file_count, total_size_mb
+        | filter operation = "backup"
+        | stats count() as backup_count, 
+                sum(file_count) as total_files, 
+                sum(total_size_mb) as total_size_mb by bin(5m)
+        | sort @timestamp desc
+
+  RestoreInsightsQuery:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: !Sub 'DisasterRecovery-${Environment}-RestoreSummary'
+      LogGroupNames:
+        - !Ref RestoreOperationsLogGroup
+      QueryString: |
+        fields @timestamp, operation, status, job_id, restore_type
+        | filter operation = "restore"
+        | stats count() as restore_count by status, restore_type
+        | sort @timestamp desc
+
+Outputs:
+  NotificationTopicArn:
+    Description: ARN of the SNS topic for notifications
+    Value: !Ref BackupNotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-NotificationTopicArn'
+  
+  BackupLogGroupName:
+    Description: Name of the backup operations log group
+    Value: !Ref BackupOperationsLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-BackupLogGroupName'
+  
+  RestoreLogGroupName:
+    Description: Name of the restore operations log group
+    Value: !Ref RestoreOperationsLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-RestoreLogGroupName'
+  
+  DashboardURL:
+    Description: URL of the CloudWatch dashboard
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${BackupDashboard}'
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardURL'

@@ -1,0 +1,171 @@
+{
+  "backupName": "PersonalFiles",
+  "description": "Personal computer disaster recovery backup configuration",
+  "compression": {
+    "enabled": true,
+    "level": 6,
+    "format": "zip",
+    "comment": "Compression level 1-9, where 9 is maximum compression but slower"
+  },
+  "schedule": {
+    "frequency": "weekly",
+    "time": "02:00",
+    "timezone": "local",
+    "comment": "Options: daily, weekly, monthly. Time in 24-hour format."
+  },
+  "retention": {
+    "keepDaily": 7,
+    "keepWeekly": 4,
+    "keepMonthly": 12,
+    "keepYearly": 7,
+    "comment": "Retention policy for different backup frequencies"
+  },
+  "paths": [
+    {
+      "name": "Documents",
+      "source": "C:\\Users\\%USERNAME%\\Documents",
+      "description": "User documents folder",
+      "include": [
+        "*.pdf",
+        "*.doc",
+        "*.docx", 
+        "*.xls",
+        "*.xlsx",
+        "*.ppt",
+        "*.pptx",
+        "*.txt",
+        "*.rtf",
+        "*.odt",
+        "*.ods",
+        "*.odp"
+      ],
+      "exclude": [
+        "temp/*",
+        "cache/*",
+        "*.tmp",
+        "~$*",
+        "Thumbs.db"
+      ]
+    },
+    {
+      "name": "Pictures",
+      "source": "C:\\Users\\%USERNAME%\\Pictures",
+      "description": "Photo and image collection", 
+      "include": [
+        "*.jpg",
+        "*.jpeg",
+        "*.png",
+        "*.gif",
+        "*.bmp",
+        "*.tiff",
+        "*.tif",
+        "*.raw",
+        "*.cr2",
+        "*.nef",
+        "*.arw",
+        "*.psd",
+        "*.ai",
+        "*.svg"
+      ],
+      "exclude": [
+        "thumbnails/*",
+        "cache/*",
+        "temp/*",
+        "*.db"
+      ]
+    },
+    {
+      "name": "Videos",
+      "source": "C:\\Users\\%USERNAME%\\Videos",
+      "description": "Video files (be aware of large file sizes)",
+      "include": [
+        "*.mp4",
+        "*.avi",
+        "*.mkv",
+        "*.mov",
+        "*.wmv",
+        "*.flv",
+        "*.webm",
+        "*.m4v"
+      ],
+      "exclude": [
+        "temp/*",
+        "cache/*",
+        "*.part"
+      ]
+    },
+    {
+      "name": "Music",
+      "source": "C:\\Users\\%USERNAME%\\Music",
+      "description": "Audio files and music library",
+      "include": [
+        "*.mp3",
+        "*.flac",
+        "*.wav",
+        "*.aac",
+        "*.ogg",
+        "*.wma",
+        "*.m4a"
+      ],
+      "exclude": [
+        "cache/*",
+        "temp/*"
+      ]
+    },
+    {
+      "name": "Desktop",
+      "source": "C:\\Users\\%USERNAME%\\Desktop",
+      "description": "Desktop files (excluding shortcuts)",
+      "include": [
+        "*.*"
+      ],
+      "exclude": [
+        "*.lnk",
+        "*.url",
+        "desktop.ini",
+        "Thumbs.db"
+      ]
+    },
+    {
+      "name": "CustomFolder",
+      "source": "D:\\ImportantData",
+      "description": "Custom important data folder - modify path as needed",
+      "enabled": false,
+      "include": [
+        "*.*"
+      ],
+      "exclude": [
+        "*.tmp",
+        "cache/*",
+        "temp/*"
+      ]
+    }
+  ],
+  "notification": {
+    "emailOnSuccess": true,
+    "emailOnFailure": true,
+    "includeLogSummary": true
+  },
+  "advanced": {
+    "maxFileSize": "2GB",
+    "skipFilesOlderThanDays": null,
+    "skipFilesNewerThanDays": null,
+    "maxConcurrentUploads": 3,
+    "retryAttempts": 3,
+    "comment": "Advanced settings - modify with caution"
+  },
+  "metadata": {
+    "configVersion": "1.0",
+    "createdDate": "2024-01-15",
+    "lastModified": "2024-01-15",
+    "notes": [
+      "This configuration backs up common personal files to AWS Glacier Deep Archive",
+      "Modify the 'source' paths to match your specific directory structure",
+      "Enable/disable paths by adding 'enabled': false to any path object",
+      "The 'CustomFolder' path is disabled by default - enable and modify as needed",
+      "Large video files can significantly increase backup costs",
+      "Test with a small subset of files first",
+      "Review and adjust include/exclude patterns based on your needs"
+    ]
+  }
+}
