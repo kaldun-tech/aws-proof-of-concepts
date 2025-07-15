@@ -76,7 +76,7 @@ poc-2-data-analytics/
 ### Prerequisites
 - AWS CLI installed and configured with appropriate credentials
 - PowerShell (pwsh) installed
-- S3 bucket for CloudFormation templates
+- S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 
 ### Deployment
 

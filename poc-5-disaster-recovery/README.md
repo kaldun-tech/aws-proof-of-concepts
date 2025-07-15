@@ -90,6 +90,7 @@ poc-5-disaster-recovery/
 ### Prerequisites
 - AWS CLI installed and configured with appropriate credentials
 - PowerShell 5.1 or later
+- S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 - At least 1GB free disk space for temporary compression
 - Windows 10 or later (scripts can be adapted for other platforms)
 

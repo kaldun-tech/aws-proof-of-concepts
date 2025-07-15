@@ -86,7 +86,7 @@ poc-1-serverless-architecture/
 ### Prerequisites
 - AWS CLI installed and configured with appropriate credentials
 - PowerShell (pwsh) installed
-- S3 bucket for CloudFormation templates
+- S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 - Email address for SNS notifications
 
 ### Deployment

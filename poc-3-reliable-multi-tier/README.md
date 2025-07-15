@@ -20,6 +20,7 @@ The infrastructure is deployed using the following CloudFormation templates:
 
 - AWS CLI installed and configured with appropriate credentials
 - PowerShell installed
+- S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 - AWS account with permissions to create the required resources
 
 ## Deployment
@@ -37,7 +38,7 @@ cd poc-3-reliable-multi-tier\infrastructure\scripts
 |-----------|-------------|----------|--------|
 | Environment | Deployment environment (dev, test, prod) | Yes | - |
 | EmailAddress | Email address for notifications | Yes | - |
-| S3BucketName | S3 bucket for CloudFormation templates | Yes | - |
+| S3BucketName | S3 bucket name for CloudFormation templates (created automatically if it doesn't exist) | Yes | - |
 | Region | AWS region to deploy to | No | us-east-1 |
 | StackNamePrefix | Prefix for CloudFormation stack names | No | WebApp1 |
 
