@@ -75,7 +75,7 @@ poc-2-data-analytics/
 
 ### Prerequisites
 - AWS CLI installed and configured with appropriate credentials
-- PowerShell (pwsh) installed
+- PowerShell 7+ (pwsh) installed
 - S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 
 ### Deployment
@@ -117,6 +117,9 @@ You can deploy specific components by changing the `-Component` parameter:
 
 # Setup QuickSight resources
 ./deploy.ps1 -Environment dev -S3BucketName your-cf-templates-bucket -Component quicksight
+
+# Deploy with specific AWS profile (useful for SSO)
+./deploy.ps1 -Environment dev -S3BucketName your-cf-templates-bucket -Profile my-sso-profile
 ```
 
 #### Deployment Parameters
@@ -128,6 +131,7 @@ You can deploy specific components by changing the `-Component` parameter:
 | Component | Component to deploy (all, iam, s3, lambda, firehose, api-gateway, athena, quicksight) | No | all |
 | RunTests | Whether to run tests after deployment | No | $true |
 | SetupQuickSight | Generate QuickSight SQL queries and setup instructions | No | $false |
+| Profile | AWS CLI profile to use for authentication | No | default |
 
 ### Teardown
 

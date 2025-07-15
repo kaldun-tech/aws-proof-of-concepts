@@ -19,7 +19,7 @@ The infrastructure is deployed using the following CloudFormation templates:
 ## Prerequisites
 
 - AWS CLI installed and configured with appropriate credentials
-- PowerShell installed
+- PowerShell 7+ (pwsh) installed
 - S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 - AWS account with permissions to create the required resources
 
@@ -30,6 +30,9 @@ To deploy the infrastructure, use the provided `deploy.ps1` script:
 ```powershell
 cd poc-3-reliable-multi-tier\infrastructure\scripts
 .\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name
+
+# Deploy with specific AWS profile (useful for SSO)
+.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Profile my-sso-profile
 ```
 
 ### Parameters
@@ -41,6 +44,7 @@ cd poc-3-reliable-multi-tier\infrastructure\scripts
 | S3BucketName | S3 bucket name for CloudFormation templates (created automatically if it doesn't exist) | Yes | - |
 | Region | AWS region to deploy to | No | us-east-1 |
 | StackNamePrefix | Prefix for CloudFormation stack names | No | WebApp1 |
+| Profile | AWS CLI profile to use for authentication | No | default |
 
 ## Teardown
 

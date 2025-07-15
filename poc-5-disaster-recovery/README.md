@@ -89,7 +89,7 @@ poc-5-disaster-recovery/
 
 ### Prerequisites
 - AWS CLI installed and configured with appropriate credentials
-- PowerShell 5.1 or later
+- PowerShell 7+ (pwsh) installed
 - S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 - At least 1GB free disk space for temporary compression
 - Windows 10 or later (scripts can be adapted for other platforms)
@@ -106,6 +106,9 @@ cd infrastructure/scripts
 
 # Deploy all components
 ./deploy.ps1 -Environment dev -BackupBucketName your-backup-bucket-name -UserEmail your-email@example.com
+
+# Deploy with specific AWS profile (useful for SSO)
+./deploy.ps1 -Environment dev -BackupBucketName your-backup-bucket-name -UserEmail your-email@example.com -Profile my-sso-profile
 ```
 
 #### Deployment Parameters
@@ -117,6 +120,7 @@ cd infrastructure/scripts
 | UserEmail | Email address for backup notifications | Yes | - |
 | Region | AWS region for deployment | No | us-east-1 |
 | RetentionYears | Years to retain backups | No | 7 |
+| Profile | AWS CLI profile to use for authentication | No | default |
 
 ### Setting Up Backups
 

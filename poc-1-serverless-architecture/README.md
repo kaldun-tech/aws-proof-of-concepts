@@ -85,7 +85,7 @@ poc-1-serverless-architecture/
 
 ### Prerequisites
 - AWS CLI installed and configured with appropriate credentials
-- PowerShell (pwsh) installed
+- PowerShell 7+ (pwsh) installed
 - S3 bucket name for CloudFormation templates (bucket will be created automatically if it doesn't exist)
 - Email address for SNS notifications
 
@@ -125,6 +125,9 @@ You can deploy specific components by changing the `-Component` parameter:
 
 # Deploy only API Gateway
 ./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component api-gateway
+
+# Deploy with specific AWS profile (useful for SSO)
+./deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Profile my-sso-profile
 ```
 
 #### Deployment Parameters
@@ -136,6 +139,7 @@ You can deploy specific components by changing the `-Component` parameter:
 | S3BucketName | S3 bucket for CloudFormation templates | Yes | - |
 | Component | Component to deploy (all, iam, dynamodb, sqs, lambda, sns, api-gateway) | No | all |
 | RunTests | Whether to run tests after deployment | No | $true |
+| Profile | AWS CLI profile to use for authentication | No | default |
 
 ### Teardown
 
