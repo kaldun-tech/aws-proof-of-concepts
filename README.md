@@ -108,5 +108,3 @@ Refer to each POC's README.md for specific deployment and teardown instructions.
 - AWS CLI configured with appropriate credentials
 - PowerShell (pwsh) installed
 - Basic understanding of CloudFormation templates
-- Python 3.8+ (for Lambda function development)
-- Docker (for containerized microservices POC)
