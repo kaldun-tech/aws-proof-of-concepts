@@ -276,6 +276,7 @@ if ($Component -eq "all" -or $Component -eq "lambda") {
     $snsTopicARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sns" --query "Stacks[0].Outputs[?OutputKey=='TopicARN'].OutputValue" --output text --region $region
     $lambdaSQSDynamoDBRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='LambdaSQSDynamoDBRoleARN'].OutputValue" --output text --region $region
     $lambdaDynamoDBSNSRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='LambdaDynamoDBSNSRoleARN'].OutputValue" --output text --region $region
+    $dynamoDBStreamARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-dynamodb" --query "Stacks[0].Outputs[?OutputKey=='StreamArn'].OutputValue" --output text --region $region
 
     $stackName = "$stackNamePrefix-lambda"
     $templateFile = Join-Path $templateDir "lambda.yaml"
@@ -287,6 +288,7 @@ if ($Component -eq "all" -or $Component -eq "lambda") {
         "SNSTopicARN" = $snsTopicARN
         "LambdaSQSDynamoDBRoleARN" = $lambdaSQSDynamoDBRoleARN
         "LambdaDynamoDBSNSRoleARN" = $lambdaDynamoDBSNSRoleARN
+        "DynamoDBStreamARN" = $dynamoDBStreamARN
     }
     New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters -capabilities $true
     if (-not (Test-StackDeployment -stackName $stackName)) {

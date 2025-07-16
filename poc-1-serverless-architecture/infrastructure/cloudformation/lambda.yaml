@@ -35,6 +35,10 @@ Parameters:
     Type: String
     Description: ARN of the Lambda DynamoDB SNS Role
 
+  DynamoDBStreamARN:
+    Type: String
+    Description: ARN of the DynamoDB Stream
+
 Resources:
   # Lambda function that processes SQS messages and writes to DynamoDB
   POCLambda1:
@@ -43,7 +47,7 @@ Resources:
       FunctionName: !Sub 'POC-Lambda-1-${Environment}'
       Handler: index.handler
       Role: !Ref LambdaSQSDynamoDBRoleARN
-      Runtime: python3.9
+      Runtime: python3.12
       Timeout: 30
       MemorySize: 128
       Environment:
@@ -98,7 +102,7 @@ Resources:
       FunctionName: !Sub 'POC-Lambda-2-${Environment}'
       Handler: index.handler
       Role: !Ref LambdaDynamoDBSNSRoleARN
-      Runtime: python3.9
+      Runtime: python3.12
       Timeout: 30
       MemorySize: 128
       Environment:
@@ -186,8 +190,7 @@ Resources:
     Properties:
       BatchSize: 100
       Enabled: true
-      EventSourceArn: !ImportValue 
-        Fn::Sub: 'POC-DynamoDB-${Environment}-StreamArn'  # Updated to match the export name in dynamodb.yaml
+      EventSourceArn: !Ref DynamoDBStreamARN
       FunctionName: !GetAtt POCLambda2.Arn
       StartingPosition: LATEST
 
