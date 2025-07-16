@@ -46,34 +46,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Queue policy to allow specific IAM roles to send and receive messages
-  OrdersQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref OrdersQueue
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          # Allow API Gateway role to send messages
-          - Effect: Allow
-            Principal:
-              AWS: 
-                Fn::ImportValue: !Sub 'POC-IAM-${Environment}-APIGatewaySQSRoleARN'
-            Action: sqs:SendMessage
-            Resource: !GetAtt OrdersQueue.Arn
-          
-          # Allow Lambda role to receive messages
-          - Effect: Allow
-            Principal:
-              AWS: 
-                Fn::ImportValue: !Sub 'POC-IAM-${Environment}-LambdaSQSDynamoDBRoleARN'
-            Action: 
-              - sqs:ReceiveMessage
-              - sqs:DeleteMessage
-              - sqs:GetQueueAttributes
-              - sqs:ChangeMessageVisibility
-            Resource: !GetAtt OrdersQueue.Arn
+  # Note: Queue policy removed for simplicity. IAM roles will have direct permissions instead.
 
 Outputs:
   QueueURL:
