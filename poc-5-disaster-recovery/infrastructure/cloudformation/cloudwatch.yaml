@@ -66,50 +66,6 @@ Resources:
         - !Ref BackupNotificationTopic
       TreatMissingData: notBreaching
 
-  # CloudWatch Alarm for high storage costs
-  StorageCostAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub 'DisasterRecovery-${Environment}-HighStorageCosts'
-      AlarmDescription: 'Alerts when storage costs exceed threshold'
-      MetricName: EstimatedCharges
-      Namespace: AWS/Billing
-      Statistic: Maximum
-      Period: 86400  # 24 hours
-      EvaluationPeriods: 1
-      Threshold: !Ref CostThresholdUSD
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: ServiceName
-          Value: AmazonS3
-        - Name: Currency
-          Value: USD
-      AlarmActions:
-        - !Ref BackupNotificationTopic
-      TreatMissingData: notBreaching
-
-  # CloudWatch Alarm for backup frequency
-  BackupFrequencyAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub 'DisasterRecovery-${Environment}-BackupFrequency'
-      AlarmDescription: 'Alerts when no backups have been created in 48 hours'
-      MetricName: NumberOfObjects
-      Namespace: AWS/S3
-      Statistic: Maximum
-      Period: 86400  # 24 hours
-      EvaluationPeriods: 2  # 48 hours
-      Threshold: 1
-      ComparisonOperator: LessThanThreshold
-      Dimensions:
-        - Name: BucketName
-          Value: !Ref BackupBucketName
-        - Name: StorageType
-          Value: AllStorageTypes
-      AlarmActions:
-        - !Ref BackupNotificationTopic
-      TreatMissingData: breaching
-
   # CloudWatch Dashboard for backup monitoring
   BackupDashboard:
     Type: AWS::CloudWatch::Dashboard

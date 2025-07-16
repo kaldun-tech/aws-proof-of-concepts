@@ -25,18 +25,6 @@ Parameters:
     Description: VPC CIDR block for IPv4. Default of 10.0.0.0/16 is recommended for testing.
     Type: String
     Default: 10.0.0.0/16
-  VPCSubnetIPv4Size:
-    Description: Host bit mask length of each subnet, e.g. default of 8 will be a /24 subnet size.
-    Type: Number
-    Default: 8
-  VPCNumberOfIPv4Subnets:
-    Description: Number of equally sized IPv4 subnets that will be created within the VPC CIDR block. Default of 256 is recommended for testing.
-    Type: Number
-    Default: 256
-  VPCFlowLogRetention:
-    Description: VPC Flow Log retention time in days. Note that VPC Flow Logs will be deleted when this stack is deleted.
-    Type: String
-    Default: 90
   #ALB #1 Tier:
   ALB1SubnetsEnabled:
     Description: Create subnets and other resources for application load balancer (ALB) tier. False disables the ALB tier completely. 
@@ -108,55 +96,6 @@ Resources:
             - '-'
             - - !Ref NamingPrefix
               - VPC
-  VPCFlowLogGroup:
-    #https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-logs-loggroup.html
-    Type: "AWS::Logs::LogGroup"
-    DeletionPolicy: Delete
-    Properties:
-      #We omit LogGroupName so a unique one is generated
-      #LogGroupName:
-      RetentionInDays: !Ref VPCFlowLogRetention
-  VPCFlowLog:
-    #https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-flowlog.html
-    Type: "AWS::EC2::FlowLog"
-    DependsOn: VPCFlowLogGroup
-    Properties:
-      DeliverLogsPermissionArn: !GetAtt VPCFlowLogRole.Arn
-      #LogDestination
-      LogDestinationType: cloud-watch-logs
-      LogGroupName: !Ref VPCFlowLogGroup
-      ResourceId: !Ref VPC
-      ResourceType: VPC
-      TrafficType: ALL
-  VPCFlowLogRole:
-    #https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
-    Type: 'AWS::IAM::Role'
-    Properties:
-      RoleName: !Sub '${NamingPrefix}-VPCFlowLog-${AWS::Region}-${VPC}'
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - vpc-flow-logs.amazonaws.com
-            Action:
-              - 'sts:AssumeRole'
-      Path: /
-      #PermissionsBoundary:
-      Policies:
-        - PolicyName: VPCFlowLog
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:DescribeLogGroups'
-                  - 'logs:DescribeLogStreams'
-                  - 'logs:PutLogEvents'
-                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${AWS::StackName}-VPCFlowLogGroup-*'
   IGW:
     #https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-internetgateway.html
     Type: 'AWS::EC2::InternetGateway'
