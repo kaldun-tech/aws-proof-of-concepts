@@ -249,6 +249,7 @@ if ($Component -eq "all" -or $Component -eq "firehose") {
     # Get outputs from previous stacks
     $s3BucketName = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-s3" --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" --output text --region $region
     $lambdaFunctionArn = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-lambda" --query "Stacks[0].Outputs[?OutputKey=='TransformDataFunctionArn'].OutputValue" --output text --region $region
+    $firehoseRoleArn = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='FirehoseRoleARN'].OutputValue" --output text --region $region
 
     $stackName = "$stackNamePrefix-firehose"
     $templateFile = Join-Path $templateDir "firehose.yaml"
@@ -256,6 +257,7 @@ if ($Component -eq "all" -or $Component -eq "firehose") {
         "Environment" = $Environment
         "S3BucketName" = $s3BucketName
         "LambdaFunctionArn" = $lambdaFunctionArn
+        "FirehoseRoleArn" = $firehoseRoleArn
     }
     New-CloudFormationStack -stackName $stackName -templateFile $templateFile -parameters $parameters
     if (-not (Test-StackDeployment -stackName $stackName)) {

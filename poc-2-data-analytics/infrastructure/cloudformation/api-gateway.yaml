@@ -130,8 +130,6 @@ Resources:
         - ResourcePath: '/*'
           HttpMethod: '*'
           MetricsEnabled: true
-          DataTraceEnabled: true
-          LoggingLevel: INFO
       Tags:
         - Key: Environment
           Value: !Ref Environment

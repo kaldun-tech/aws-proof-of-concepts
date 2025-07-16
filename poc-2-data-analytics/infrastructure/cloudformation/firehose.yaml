@@ -21,47 +21,11 @@ Parameters:
     Description: ARN of the Lambda function for data transformation
     Default: ''
 
-Resources:
-  FirehoseDeliveryRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: firehose.amazonaws.com
-            Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AmazonKinesisFirehoseServiceRole'
-      Policies:
-        - PolicyName: S3DeliveryPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 's3:AbortMultipartUpload'
-                  - 's3:GetBucketLocation'
-                  - 's3:GetObject'
-                  - 's3:ListBucket'
-                  - 's3:ListBucketMultipartUploads'
-                  - 's3:PutObject'
-                Resource:
-                  - !Sub 'arn:aws:s3:::${S3BucketName}'
-                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
-        - PolicyName: LambdaInvokePolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'lambda:InvokeFunction'
-                  - 'lambda:GetFunctionConfiguration'
-                Resource:
-                  - !Ref LambdaFunctionArn
-                  - !Sub '${LambdaFunctionArn}:*'
+  FirehoseRoleArn:
+    Type: String
+    Description: ARN of the Firehose IAM role from IAM stack
 
+Resources:
   FirehoseDeliveryStream:
     Type: AWS::KinesisFirehose::DeliveryStream
     Properties:
@@ -69,7 +33,7 @@ Resources:
       DeliveryStreamType: DirectPut
       ExtendedS3DestinationConfiguration:
         BucketARN: !Sub 'arn:aws:s3:::${S3BucketName}'
-        RoleARN: !GetAtt FirehoseDeliveryRole.Arn
+        RoleARN: !Ref FirehoseRoleArn
         BufferingHints:
           IntervalInSeconds: 60
           SizeInMBs: 5
@@ -83,18 +47,6 @@ Resources:
               Parameters:
                 - ParameterName: LambdaArn
                   ParameterValue: !Ref LambdaFunctionArn
-                - ParameterName: BufferSizeInMBs
-                  ParameterValue: '1'
-                - ParameterName: BufferIntervalInSeconds
-                  ParameterValue: '60'
-                - ParameterName: NumberOfRetries
-                  ParameterValue: '3'
-                - ParameterName: RoleArn
-                  ParameterValue: !GetAtt FirehoseDeliveryRole.Arn
-        CloudWatchLoggingOptions:
-          Enabled: true
-          LogGroupName: !Sub '/aws/kinesisfirehose/data-delivery-stream-${Environment}'
-          LogStreamName: 'S3Delivery'
 
 Outputs:
   FirehoseDeliveryStreamName:
@@ -109,8 +61,3 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-FirehoseDeliveryStreamArn'
   
-  FirehoseDeliveryRoleArn:
-    Description: ARN of the IAM role for Kinesis Data Firehose
-    Value: !GetAtt FirehoseDeliveryRole.Arn
-    Export:
-      Name: !Sub '${AWS::StackName}-FirehoseDeliveryRoleArn'

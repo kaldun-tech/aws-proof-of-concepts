@@ -71,7 +71,7 @@ Resources:
           'projection.datehour.range' = '2021/01/01/00,NOW',
           'projection.datehour.interval' = '1',
           'projection.datehour.interval.unit' = 'HOURS',
-          'storage.location.template' = 's3://${S3BucketName}/$${datehour}/'
+          'storage.location.template' = 's3://${S3BucketName}/data/$${datehour}/'
         )
       WorkGroup: !Ref AthenaWorkGroup
 
@@ -85,24 +85,6 @@ Resources:
       QueryString: 'SELECT * FROM my_ingested_data'
       WorkGroup: !Ref AthenaWorkGroup
 
-  # Athena Named Query for analytics
-  AthenaAnalyticsQuery:
-    Type: AWS::Athena::NamedQuery
-    Properties:
-      Name: !Sub 'analyze-clickstream-data-${Environment}'
-      Description: 'Query to analyze clickstream data by element clicked'
-      Database: default
-      QueryString: |
-        SELECT 
-          element_clicked, 
-          COUNT(*) as view_count, 
-          AVG(time_spent) as avg_time_spent,
-          MIN(time_spent) as min_time_spent,
-          MAX(time_spent) as max_time_spent
-        FROM my_ingested_data
-        GROUP BY element_clicked
-        ORDER BY view_count DESC
-      WorkGroup: !Ref AthenaWorkGroup
 
 Outputs:
   AthenaWorkGroupName:
@@ -123,8 +105,3 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-SelectDataQueryId'
   
-  AnalyticsQueryId:
-    Description: ID of the Athena query for analytics
-    Value: !Ref AthenaAnalyticsQuery
-    Export:
-      Name: !Sub '${AWS::StackName}-AnalyticsQueryId'
