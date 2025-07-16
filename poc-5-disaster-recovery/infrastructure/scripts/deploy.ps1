@@ -34,11 +34,17 @@
 .PARAMETER TestSize
     Size of tests to run (minimal, standard, comprehensive).
 
+.PARAMETER Profile
+    The AWS CLI profile to use for authentication. Optional - uses default profile if not specified.
+
 .EXAMPLE
     ./deploy.ps1 -Environment dev -BackupBucketName my-backup-bucket-unique-name -UserEmail user@example.com
     
 .EXAMPLE
     ./deploy.ps1 -Environment dev -BackupBucketName my-backup-bucket-unique-name -UserEmail user@example.com -RunTests $true -TestSize comprehensive
+
+.EXAMPLE
+    ./deploy.ps1 -Environment dev -BackupBucketName my-backup-bucket-unique-name -UserEmail user@example.com -Profile my-sso-profile
 #>
 
 param (
@@ -74,11 +80,20 @@ param (
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("minimal", "standard", "comprehensive")]
-    [string]$TestSize = "standard"
+    [string]$TestSize = "standard",
+
+    [Parameter(Mandatory=$false)]
+    [string]$Profile = ""
 )
 
 # Set error action preference
 $ErrorActionPreference = "Stop"
+
+# Set up AWS CLI profile parameter
+if ($Profile) {
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+}
 
 # Set the AWS region
 $region = $Region

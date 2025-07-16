@@ -60,7 +60,10 @@ $stackNamePrefix = "poc"
 $templateDir = Join-Path $PSScriptRoot ".." "cloudformation"
 
 # Set up AWS CLI profile parameter
-$profileParam = if ($Profile) { "--profile $Profile" } else { "" }
+if ($Profile) {
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+}
 
 # Function to check if S3 bucket exists, create if it doesn't
 function New-S3Bucket {
@@ -70,10 +73,10 @@ function New-S3Bucket {
 
     try {
         Write-Host "Checking if S3 bucket $bucketName exists..."
-        aws s3api head-bucket --bucket $bucketName $profileParam 2>&1
+        aws s3api head-bucket --bucket $bucketName 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Creating S3 bucket $bucketName..."
-            aws s3 mb s3://$bucketName --region $region $profileParam
+            aws s3 mb s3://$bucketName --region $region
         }
         else {
             Write-Host "S3 bucket $bucketName already exists."
@@ -95,7 +98,7 @@ function ConvertTo-CloudFormationPackage {
 
     try {
         Write-Host "Packaging CloudFormation template $templateFile..."
-        aws cloudformation package $profileParam `
+        aws cloudformation package `
             --template-file $templateFile `
             --s3-bucket $s3Bucket `
             --output-template-file $outputFile `
@@ -124,7 +127,7 @@ function New-CloudFormationStack {
             $paramString += "$key=$($parameters[$key]) "
         }
         
-        $cmd = "aws cloudformation deploy $profileParam " +
+        $cmd = "aws cloudformation deploy " +
                "--template-file $templateFile " +
                "--stack-name $stackName " +
                "--region $region "
@@ -154,7 +157,7 @@ function Test-StackDeployment {
     
     try {
         Write-Host "Validating stack deployment: $stackName..."
-        $status = aws cloudformation describe-stacks --stack-name $stackName --query "Stacks[0].StackStatus" --output text --region $region $profileParam
+        $status = aws cloudformation describe-stacks --stack-name $stackName --query "Stacks[0].StackStatus" --output text --region $region
         
         if ($status -like "*COMPLETE") {
             Write-Host "Stack $stackName deployed successfully with status: $status" -ForegroundColor Green
@@ -236,12 +239,12 @@ if ($Component -eq "all" -or $Component -eq "sns") {
 # Deploy Lambda stack
 if ($Component -eq "all" -or $Component -eq "lambda") {
     # Get outputs from previous stacks
-    $dynamoDBTableName = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-dynamodb" --query "Stacks[0].Outputs[?OutputKey=='TableName'].OutputValue" --output text --region $region $profileParam
-    $sqsQueueURL = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region $profileParam
-    $sqsQueueARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueARN'].OutputValue" --output text --region $region $profileParam
-    $snsTopicARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sns" --query "Stacks[0].Outputs[?OutputKey=='TopicARN'].OutputValue" --output text --region $region $profileParam
-    $lambdaSQSDynamoDBRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='LambdaSQSDynamoDBRoleARN'].OutputValue" --output text --region $region $profileParam
-    $lambdaDynamoDBSNSRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='LambdaDynamoDBSNSRoleARN'].OutputValue" --output text --region $region $profileParam
+    $dynamoDBTableName = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-dynamodb" --query "Stacks[0].Outputs[?OutputKey=='TableName'].OutputValue" --output text --region $region
+    $sqsQueueURL = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region
+    $sqsQueueARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueARN'].OutputValue" --output text --region $region
+    $snsTopicARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sns" --query "Stacks[0].Outputs[?OutputKey=='TopicARN'].OutputValue" --output text --region $region
+    $lambdaSQSDynamoDBRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='LambdaSQSDynamoDBRoleARN'].OutputValue" --output text --region $region
+    $lambdaDynamoDBSNSRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='LambdaDynamoDBSNSRoleARN'].OutputValue" --output text --region $region
 
     $stackName = "$stackNamePrefix-lambda"
     $templateFile = Join-Path $templateDir "lambda.yaml"
@@ -264,9 +267,9 @@ if ($Component -eq "all" -or $Component -eq "lambda") {
 # Deploy API Gateway stack
 if ($Component -eq "all" -or $Component -eq "api-gateway") {
     # Get outputs from previous stacks
-    $sqsQueueURL = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region $profileParam
-    $sqsQueueARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueARN'].OutputValue" --output text --region $region $profileParam
-    $apiGatewaySQSRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='APIGatewaySQSRoleARN'].OutputValue" --output text --region $region $profileParam
+    $sqsQueueURL = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region
+    $sqsQueueARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueARN'].OutputValue" --output text --region $region
+    $apiGatewaySQSRoleARN = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-iam" --query "Stacks[0].Outputs[?OutputKey=='APIGatewaySQSRoleARN'].OutputValue" --output text --region $region
 
     $stackName = "$stackNamePrefix-api-gateway"
     $templateFile = Join-Path $templateDir "api-gateway.yaml"
@@ -317,7 +320,7 @@ function Test-DeployedInfrastructure {
     
     try {
         # Test 1: Verify API Gateway endpoint is accessible
-        $apiUrl = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-api-gateway" --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text --region $region $profileParam
+        $apiUrl = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-api-gateway" --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text --region $region
         if ($apiUrl) {
             Write-Host "API Gateway endpoint: $apiUrl" -ForegroundColor Green
             Write-Host "Testing API Gateway connectivity..." -ForegroundColor Cyan
@@ -336,9 +339,9 @@ function Test-DeployedInfrastructure {
         }
         
         # Test 2: Verify DynamoDB table exists and is active
-        $tableName = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-dynamodb" --query "Stacks[0].Outputs[?OutputKey=='TableName'].OutputValue" --output text --region $region $profileParam
+        $tableName = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-dynamodb" --query "Stacks[0].Outputs[?OutputKey=='TableName'].OutputValue" --output text --region $region
         if ($tableName) {
-            $tableStatus = aws dynamodb describe-table --table-name $tableName --query "Table.TableStatus" --output text --region $region $profileParam
+            $tableStatus = aws dynamodb describe-table --table-name $tableName --query "Table.TableStatus" --output text --region $region
             Write-Host "DynamoDB Table '$tableName' status: $tableStatus" -ForegroundColor Green
             $testResults["DynamoDB"] = @{ "TableName" = $tableName; "Status" = $tableStatus }
         } else {
@@ -347,10 +350,10 @@ function Test-DeployedInfrastructure {
         }
         
         # Test 3: Verify SQS queue is accessible
-        $queueUrl = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region $profileParam
+        $queueUrl = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sqs" --query "Stacks[0].Outputs[?OutputKey=='QueueURL'].OutputValue" --output text --region $region
         if ($queueUrl) {
             # Get queue attributes and extract message count
-            $messageCount = (aws sqs get-queue-attributes --queue-url $queueUrl --attribute-names All --region $region $profileParam | ConvertFrom-Json).Attributes.ApproximateNumberOfMessages
+            $messageCount = (aws sqs get-queue-attributes --queue-url $queueUrl --attribute-names All --region $region | ConvertFrom-Json).Attributes.ApproximateNumberOfMessages
             Write-Host "SQS Queue is accessible: $queueUrl (Messages: $messageCount)" -ForegroundColor Green
             # Store the message count in the test results
             $testResults["SQSQueue"] = @{ "QueueUrl" = $queueUrl; "MessageCount" = $messageCount }
@@ -360,11 +363,11 @@ function Test-DeployedInfrastructure {
         }
         
         # Test 4: Verify SNS topic exists
-        $topicArn = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sns" --query "Stacks[0].Outputs[?OutputKey=='TopicARN'].OutputValue" --output text --region $region $profileParam
+        $topicArn = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-sns" --query "Stacks[0].Outputs[?OutputKey=='TopicARN'].OutputValue" --output text --region $region
         if ($topicArn) {
             # Check if topic exists by getting attributes
-            aws sns get-topic-attributes --topic-arn $topicArn --region $region $profileParam | Out-Null
-            $subscriptionsCount = (aws sns list-subscriptions-by-topic --topic-arn $topicArn --region $region $profileParam | ConvertFrom-Json).Subscriptions.Count
+            aws sns get-topic-attributes --topic-arn $topicArn --region $region | Out-Null
+            $subscriptionsCount = (aws sns list-subscriptions-by-topic --topic-arn $topicArn --region $region | ConvertFrom-Json).Subscriptions.Count
             Write-Host "SNS Topic is accessible: $topicArn (Subscriptions: $subscriptionsCount)" -ForegroundColor Green
             $testResults["SNSTopic"] = @{ "TopicArn" = $topicArn; "SubscriptionsCount" = $subscriptionsCount }
         } else {
@@ -373,15 +376,15 @@ function Test-DeployedInfrastructure {
         }
         
         # Test 5: Verify Lambda functions exist and are active
-        $lambdaFunctions = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-lambda" --query "Stacks[0].Outputs[?starts_with(OutputKey,'LambdaFunction')].OutputValue" --output text --region $region $profileParam
+        $lambdaFunctions = aws cloudformation describe-stacks --stack-name "$stackNamePrefix-lambda" --query "Stacks[0].Outputs[?starts_with(OutputKey,'LambdaFunction')].OutputValue" --output text --region $region
         if ($lambdaFunctions) {
             $lambdaResults = @{}
             foreach ($function in $lambdaFunctions.Split()) {
                 # Verify function exists
-                aws lambda get-function --function-name $function --region $region $profileParam | Out-Null
-                $runtime = aws lambda get-function --function-name $function --query "Configuration.Runtime" --output text --region $region $profileParam
-                $state = aws lambda get-function --function-name $function --query "Configuration.State" --output text --region $region $profileParam
-                $memorySize = aws lambda get-function --function-name $function --query "Configuration.MemorySize" --output text --region $region $profileParam
+                aws lambda get-function --function-name $function --region $region | Out-Null
+                $runtime = aws lambda get-function --function-name $function --query "Configuration.Runtime" --output text --region $region
+                $state = aws lambda get-function --function-name $function --query "Configuration.State" --output text --region $region
+                $memorySize = aws lambda get-function --function-name $function --query "Configuration.MemorySize" --output text --region $region
                 Write-Host "Lambda function '$function' is $state (Runtime: $runtime, Memory: $memorySize MB)" -ForegroundColor Green
                 $lambdaResults[$function] = @{ "Runtime" = $runtime; "State" = $state; "MemorySize" = $memorySize }
             }

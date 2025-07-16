@@ -19,8 +19,17 @@
 .PARAMETER RunTests
     Whether to run tests after deployment.
 
+.PARAMETER SetupQuickSight
+    Whether to set up QuickSight resources.
+
+.PARAMETER Profile
+    The AWS CLI profile to use for authentication. Optional - uses default profile if not specified.
+
 .EXAMPLE
     ./deploy.ps1 -Environment dev -S3BucketName your-bucket-name -Component all -RunTests $true
+
+.EXAMPLE
+    ./deploy.ps1 -Environment dev -S3BucketName your-bucket-name -Profile my-sso-profile
 #>
 
 param (
@@ -39,13 +48,22 @@ param (
     [bool]$RunTests = $true,
     
     [Parameter(Mandatory=$false)]
-    [bool]$SetupQuickSight = $false
+    [bool]$SetupQuickSight = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$Profile = ""
 )
 
 # Set the AWS region
 $region = "us-east-1"
 $stackNamePrefix = "poc2-data-analytics"
 $templateDir = Join-Path $PSScriptRoot ".." "cloudformation"
+
+# Set up AWS CLI profile parameter
+if ($Profile) {
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+}
 
 # Function to check if S3 bucket exists, create if it doesn't
 function New-S3Bucket {
@@ -55,10 +73,10 @@ function New-S3Bucket {
 
     try {
         Write-Host "Checking if S3 bucket $bucketName exists..."
-        aws s3api head-bucket --bucket $bucketName 2>&1
+        aws s3api head-bucket --bucket $bucketName $profileParam 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Creating S3 bucket $bucketName..."
-            aws s3 mb s3://$bucketName --region $region
+            aws s3 mb s3://$bucketName --region $region $profileParam
         }
         else {
             Write-Host "S3 bucket $bucketName already exists."

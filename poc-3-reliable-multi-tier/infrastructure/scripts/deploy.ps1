@@ -36,11 +36,17 @@
 .PARAMETER IncludeFailoverTest
     Include failover testing (will terminate instances for testing). Default is $false.
 
+.PARAMETER Profile
+    The AWS CLI profile to use for authentication. Optional - uses default profile if not specified.
+
 .EXAMPLE
     .\deploy.ps1 -Environment dev -EmailAddress user@example.com -S3BucketName my-bucket
     
 .EXAMPLE
     .\deploy.ps1 -Environment dev -EmailAddress user@example.com -S3BucketName my-bucket -RunTests $true -TestSize comprehensive -IncludeFailoverTest
+
+.EXAMPLE
+    .\deploy.ps1 -Environment dev -EmailAddress user@example.com -S3BucketName my-bucket -Profile my-sso-profile
 #>
 
 param(
@@ -72,11 +78,19 @@ param(
     [string]$TestSize = "standard",
 
     [Parameter(Mandatory=$false)]
-    [bool]$IncludeFailoverTest = $false
+    [bool]$IncludeFailoverTest = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$Profile = ""
 )
 
 # Set error action preference
 $ErrorActionPreference = "Stop"
+
+# Set up AWS profile for PowerShell modules
+if ($Profile) {
+    Set-AWSCredential -ProfileName $Profile
+}
 
 # Import AWS PowerShell module if available
 if (Get-Module -ListAvailable -Name AWSPowerShell) {
