@@ -52,8 +52,34 @@ param (
     [bool]$Verify = $true,
     
     [Parameter(Mandatory=$false)]
-    [bool]$ShowQuickSightInstructions = $true
+    [bool]$ShowQuickSightInstructions = $true,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$Profile
 )
+
+# Set up AWS CLI profile parameter
+if ($Profile) {
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+    # Verify the profile is working
+    try {
+        $identity = aws sts get-caller-identity --profile $Profile | ConvertFrom-Json
+        Write-Host "Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "Failed to authenticate with profile '$Profile'. Please check your AWS configuration."
+        exit 1
+    }
+} else {
+    # Test default credentials
+    try {
+        $identity = aws sts get-caller-identity | ConvertFrom-Json
+        Write-Host "Using default AWS credentials. Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "No valid AWS credentials found. Please run 'aws configure' or specify a profile with -Profile parameter."
+        exit 1
+    }
+}
 
 # Function to check if a stack exists
 function Test-StackExists {
@@ -63,7 +89,7 @@ function Test-StackExists {
     
     try {
         aws cloudformation describe-stacks --stack-name $stackName --region $Region 2>$null
-        return $true
+        return $LASTEXITCODE -eq 0
     }
     catch {
         return $false
@@ -88,6 +114,11 @@ function Remove-CloudFormationStack {
         # Delete the stack
         aws cloudformation delete-stack --stack-name $stackName --region $Region
         
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to initiate deletion of stack $stackName"
+            return $false
+        }
+        
         if ($waitForCompletion) {
             Write-Host "Waiting for stack deletion to complete..." -ForegroundColor Cyan
             aws cloudformation wait stack-delete-complete --stack-name $stackName --region $Region
@@ -96,7 +127,7 @@ function Remove-CloudFormationStack {
                 Write-Host "Stack $stackName deleted successfully." -ForegroundColor Green
                 return $true
             } else {
-                Write-Error "Failed to delete stack $stackName."
+                Write-Error "Failed to delete stack $stackName. Please check the CloudFormation console for details."
                 return $false
             }
         } else {
@@ -105,7 +136,7 @@ function Remove-CloudFormationStack {
         }
     }
     catch {
-        Write-Error "Error deleting CloudFormation stack: $_"
+        Write-Error "Error deleting CloudFormation stack $stackName: $_"
         return $false
     }
 }

@@ -1,34 +1,38 @@
-# teardown.ps1
-# Script to tear down the reliable multi-tier infrastructure CloudFormation stacks
-
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tears down the reliable multi-tier infrastructure CloudFormation stacks.
+    Teardown script for the Reliable Multi-Tier POC.
 
 .DESCRIPTION
-    This script deletes the CloudFormation stacks for the reliable multi-tier infrastructure
-    proof of concept in the correct order to respect dependencies.
+    This script deletes all CloudFormation stacks created by the deploy.ps1 script.
+    It deletes the stacks in the reverse order of their creation to handle dependencies properly.
 
 .PARAMETER Environment
-    The deployment environment (dev, test, prod). Default is dev.
+    The environment name (dev, test, prod). Default is dev.
 
 .PARAMETER StackNamePrefix
-    Prefix for CloudFormation stack names. Default is WebApp1.
+    The prefix used for all stack names. Default is WebApp1.
 
 .PARAMETER Region
-    AWS region where stacks are deployed. Default is us-east-1.
+    The AWS region where the stacks are deployed. Default is us-east-1.
 
 .PARAMETER Force
-    Skip confirmation prompt. Default is $false.
+    If specified, will not prompt for confirmation before deleting stacks.
 
 .PARAMETER Component
-    Component to tear down (vpc, webapp, all). Default is all.
+    The specific component to delete (vpc, webapp, all). Default is all.
+
+.PARAMETER Profile
+    The AWS profile to use for authentication.
 
 .EXAMPLE
-    .\teardown.ps1 -Environment dev -Force $false
+    ./teardown.ps1 -Environment dev -Force $false
+    
+.EXAMPLE
+    ./teardown.ps1 -Environment prod -Component webapp -Profile my-profile
 #>
 
-param(
+param (
     [Parameter(Mandatory=$false)]
     [ValidateSet("dev", "test", "prod")]
     [string]$Environment = "dev",
@@ -44,157 +48,182 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("vpc", "webapp", "all")]
-    [string]$Component = "all"
+    [string]$Component = "all",
+    
+    [Parameter(Mandatory=$false)]
+    [string]$Profile
 )
 
-# Set error action preference
-$ErrorActionPreference = "Stop"
-
-# Import AWS PowerShell module if available
-if (Get-Module -ListAvailable -Name AWSPowerShell) {
-    Import-Module AWSPowerShell
-} elseif (Get-Module -ListAvailable -Name AWSPowerShell.NetCore) {
-    Import-Module AWSPowerShell.NetCore
+# Set up AWS CLI profile parameter
+if ($Profile) {
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+    # Verify the profile is working
+    try {
+        $identity = aws sts get-caller-identity --profile $Profile | ConvertFrom-Json
+        Write-Host "Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "Failed to authenticate with profile '$Profile'. Please check your AWS configuration."
+        exit 1
+    }
 } else {
-    Write-Error "AWS PowerShell module not found. Please install the AWS Tools for PowerShell."
-    exit 1
+    # Test default credentials
+    try {
+        $identity = aws sts get-caller-identity | ConvertFrom-Json
+        Write-Host "Using default AWS credentials. Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "No valid AWS credentials found. Please run 'aws configure' or specify a profile with -Profile parameter."
+        exit 1
+    }
 }
-
-# Set AWS region
-Set-DefaultAWSRegion -Region $Region
 
 # Function to check if a stack exists
 function Test-StackExists {
     param (
-        [string]$StackName
+        [string]$stackName
     )
     
     try {
-        Get-CFNStack -StackName $StackName -ErrorAction SilentlyContinue
-        return $true
-    } catch {
+        aws cloudformation describe-stacks --stack-name $stackName --region $Region 2>$null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
         return $false
     }
 }
 
-# Function to wait for stack deletion to complete
-function Wait-StackDeletion {
-    param (
-        [string]$StackName
-    )
-    
-    Write-Host "Waiting for deletion of stack $StackName to complete..."
-    
-    do {
-        try {
-            $stack = Get-CFNStack -StackName $StackName -ErrorAction SilentlyContinue
-            $status = $stack.StackStatus
-            
-            if ($status -like "*DELETE_COMPLETE") {
-                Write-Host "Stack $StackName deleted successfully."
-                return $true
-            } elseif ($status -like "*DELETE_FAILED") {
-                Write-Host "Stack $StackName deletion failed with status: $status"
-                return $false
-            }
-            
-            Write-Host "Current status: $status - waiting 10 seconds..."
-            Start-Sleep -Seconds 10
-        } catch {
-            # Stack might not exist anymore, which is good
-            Write-Host "Stack $StackName deleted successfully."
-            return $true
-        }
-    } while ($true)
-}
-
-# Function to delete a stack
+# Function to delete a CloudFormation stack
 function Remove-CloudFormationStack {
     param (
-        [string]$StackName
+        [string]$stackName,
+        [bool]$waitForCompletion = $true
     )
-    
-    $stackExists = Test-StackExists -StackName $StackName
-    
-    if ($stackExists) {
-        Write-Host "Deleting stack: $StackName"
-        Remove-CFNStack -StackName $StackName -Force
-        Wait-StackDeletion -StackName $StackName
-    } else {
-        Write-Host "Stack $StackName does not exist. Skipping deletion."
+
+    if (-not (Test-StackExists -stackName $stackName)) {
+        Write-Host "Stack $stackName does not exist. Skipping deletion." -ForegroundColor Yellow
+        return $true
+    }
+
+    try {
+        Write-Host "Deleting CloudFormation stack $stackName..." -ForegroundColor Cyan
+        
+        # Delete the stack
+        aws cloudformation delete-stack --stack-name $stackName --region $Region
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to initiate deletion of stack $stackName"
+            return $false
+        }
+        
+        if ($waitForCompletion) {
+            Write-Host "Waiting for stack deletion to complete..." -ForegroundColor Cyan
+            aws cloudformation wait stack-delete-complete --stack-name $stackName --region $Region
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Stack $stackName deleted successfully." -ForegroundColor Green
+                return $true
+            } else {
+                Write-Error "Failed to delete stack $stackName. Please check the CloudFormation console for details."
+                return $false
+            }
+        } else {
+            Write-Host "Stack deletion initiated for $stackName. Not waiting for completion." -ForegroundColor Yellow
+            return $true
+        }
+    }
+    catch {
+        Write-Error "Error deleting CloudFormation stack $stackName: $_"
+        return $false
     }
 }
 
-# Main teardown logic
-try {
-    Write-Host "Starting teardown of reliable multi-tier infrastructure..."
-    Write-Host "Environment: $Environment"
-    Write-Host "Region: $Region"
-    Write-Host "Stack Name Prefix: $StackNamePrefix"
-    Write-Host "Component: $Component"
+# Function to confirm deletion
+function Confirm-Deletion {
+    param (
+        [string]$message
+    )
     
-    # Confirm teardown unless Force is true
-    if (-not $Force) {
-        $confirmation = Read-Host "Are you sure you want to tear down the infrastructure? This action cannot be undone. (y/n)"
-        if ($confirmation -ne "y") {
-            Write-Host "Teardown cancelled."
-            exit 0
-        }
+    if ($Force) {
+        return $true
     }
     
-    # Define stack names
-    $webAppStackName = "$StackNamePrefix-WebApp"
-    $vpcStackName = "$StackNamePrefix-VPC"
-    
-    # Delete Web Application stack if requested
-    if ($Component -eq "webapp" -or $Component -eq "all") {
-        Remove-CloudFormationStack -StackName $webAppStackName
+    $confirmation = Read-Host "$message (y/n)"
+    return $confirmation -eq "y" -or $confirmation -eq "Y"
+}
+
+# Display warning message
+Write-Host "WARNING: This script will delete AWS resources. This action cannot be undone." -ForegroundColor Red
+Write-Host "The following stacks will be deleted based on your selection:" -ForegroundColor Yellow
+
+# List stacks that will be deleted
+$stacksToDelete = @()
+
+# Define stack names
+$webAppStackName = "$StackNamePrefix-WebApp"
+$vpcStackName = "$StackNamePrefix-VPC"
+
+if ($Component -eq "all" -or $Component -eq "webapp") {
+    if (Test-StackExists -stackName $webAppStackName) {
+        $stacksToDelete += $webAppStackName
+        Write-Host "- $webAppStackName" -ForegroundColor Yellow
     }
-    
-    # Delete VPC stack if requested and after web app stack is deleted
-    if ($Component -eq "vpc" -or $Component -eq "all") {
-        # Check if web app stack still exists
-        if ($Component -eq "vpc" -and (Test-StackExists -StackName $webAppStackName)) {
-            Write-Warning "Web Application stack still exists. Please delete it first before deleting the VPC stack."
-            Write-Warning "Run: .\teardown.ps1 -Component webapp"
-            exit 1
-        }
-        
-        Remove-CloudFormationStack -StackName $vpcStackName
+}
+
+if ($Component -eq "all" -or $Component -eq "vpc") {
+    if (Test-StackExists -stackName $vpcStackName) {
+        $stacksToDelete += $vpcStackName
+        Write-Host "- $vpcStackName" -ForegroundColor Yellow
     }
-    
-    Write-Host "Teardown completed successfully." -ForegroundColor Green
-} catch {
-    Write-Host "Teardown failed: $_" -ForegroundColor Red
+}
+
+# If no stacks found
+if ($stacksToDelete.Count -eq 0) {
+    Write-Host "No matching stacks found to delete." -ForegroundColor Green
+    exit 0
+}
+
+# Dependency check for VPC-only deletion
+if ($Component -eq "vpc" -and (Test-StackExists -stackName $webAppStackName)) {
+    Write-Host "ERROR: Web Application stack still exists. VPC stack cannot be deleted while it has dependencies." -ForegroundColor Red
+    Write-Host "Please delete the webapp component first:" -ForegroundColor Yellow
+    Write-Host "  ./teardown.ps1 -Component webapp -Environment $Environment" -ForegroundColor Yellow
     exit 1
 }
 
-# Function to clean up S3 bucket (optional)
-function Remove-S3Bucket {
-    param (
-        [string]$BucketName
-    )
-    
-    Write-Host "Do you want to delete the S3 bucket containing CloudFormation templates? (y/n)"
-    $confirmation = Read-Host
-    
-    if ($confirmation -eq "y") {
-        Write-Host "Emptying and deleting S3 bucket: $BucketName"
-        
-        # Empty bucket first
-        $objects = Get-S3Object -BucketName $BucketName
-        
-        if ($objects) {
-            foreach ($object in $objects) {
-                Remove-S3Object -BucketName $BucketName -Key $object.Key -Force
-            }
+# Confirm deletion
+if (-not (Confirm-Deletion -message "Are you sure you want to delete these stacks?")) {
+    Write-Host "Teardown cancelled." -ForegroundColor Yellow
+    exit 0
+}
+
+# Delete stacks in reverse order (to handle dependencies)
+$success = $true
+
+# Delete WebApp stack first (if included)
+if ($Component -eq "all" -or $Component -eq "webapp") {
+    if (Test-StackExists -stackName $webAppStackName) {
+        $result = Remove-CloudFormationStack -stackName $webAppStackName -waitForCompletion $true
+        if (-not $result) {
+            $success = $false
+            Write-Warning "Failed to delete stack $webAppStackName. Continuing with other stacks..."
         }
-        
-        # Delete bucket
-        Remove-S3Bucket -BucketName $BucketName -Force
-        
-        Write-Host "S3 bucket deleted successfully."
-    } else {
-        Write-Host "S3 bucket not deleted."
     }
+}
+
+# Delete VPC stack second (if included)
+if ($Component -eq "all" -or $Component -eq "vpc") {
+    if (Test-StackExists -stackName $vpcStackName) {
+        $result = Remove-CloudFormationStack -stackName $vpcStackName -waitForCompletion $true
+        if (-not $result) {
+            $success = $false
+            Write-Warning "Failed to delete stack $vpcStackName. Continuing with other stacks..."
+        }
+    }
+}
+
+# Final status message
+if ($success) {
+    Write-Host "All selected stacks have been deleted successfully." -ForegroundColor Green
+} else {
+    Write-Host "Some stacks could not be deleted. Please check the AWS CloudFormation console for details." -ForegroundColor Red
 }

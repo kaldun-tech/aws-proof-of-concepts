@@ -44,11 +44,37 @@ param (
     [bool]$PreserveBucket = $false,
 
     [Parameter(Mandatory=$false)]
-    [string]$BackupBucketName = ""
+    [string]$BackupBucketName = "",
+    
+    [Parameter(Mandatory=$false)]
+    [string]$Profile
 )
 
 # Set error action preference
 $ErrorActionPreference = "Stop"
+
+# Set up AWS CLI profile parameter
+if ($Profile) {
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+    # Verify the profile is working
+    try {
+        $identity = aws sts get-caller-identity --profile $Profile | ConvertFrom-Json
+        Write-Host "Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "Failed to authenticate with profile '$Profile'. Please check your AWS configuration."
+        exit 1
+    }
+} else {
+    # Test default credentials
+    try {
+        $identity = aws sts get-caller-identity | ConvertFrom-Json
+        Write-Host "Using default AWS credentials. Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "No valid AWS credentials found. Please run 'aws configure' or specify a profile with -Profile parameter."
+        exit 1
+    }
+}
 
 $region = $Region
 $stackNamePrefix = "disaster-recovery"
@@ -133,7 +159,8 @@ function Remove-CloudFormationStack {
         aws cloudformation delete-stack --stack-name $stackName --region $region
         
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to initiate stack deletion"
+            Write-Error "Failed to initiate deletion of stack $stackName"
+            return $false
         }
         
         Write-Host "Waiting for stack deletion to complete..."
@@ -141,12 +168,15 @@ function Remove-CloudFormationStack {
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Stack $stackName deleted successfully." -ForegroundColor Green
+            return $true
         } else {
-            Write-Warning "Stack deletion may have failed. Check AWS console for details."
+            Write-Error "Failed to delete stack $stackName. Please check the CloudFormation console for details."
+            return $false
         }
     }
     catch {
         Write-Error "Error deleting stack $stackName: $_"
+        return $false
     }
 }
 
@@ -272,7 +302,12 @@ try {
     
     # Delete the main stack
     Write-Host "`nDeleting CloudFormation stack..."
-    Remove-CloudFormationStack -stackName $mainStackName
+    $stackDeleteResult = Remove-CloudFormationStack -stackName $mainStackName
+    
+    if (-not $stackDeleteResult) {
+        Write-Error "Failed to delete CloudFormation stack $mainStackName"
+        exit 1
+    }
     
     # Verify deletion
     if (!(Test-StackExists -stackName $mainStackName)) {
