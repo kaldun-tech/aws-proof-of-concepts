@@ -115,80 +115,19 @@ if (-not (Test-Path $sqlQueriesDir)) {
     New-Item -ItemType Directory -Path $sqlQueriesDir | Out-Null
 }
 
-# Basic query to get all data
-$allDataQuery = @"
--- Basic query to get all clickstream data
-SELECT 
-    element_clicked,
-    time_spent,
-    source_menu,
-    created_at,
-    datehour
-FROM 
-    my_ingested_data
-ORDER BY 
-    created_at DESC
-LIMIT 100;
-"@
+# Read queries from existing SQL files
+$allDataQuery = Get-Content -Path ".\sql-queries\all-data.sql" -Raw
+$popularItemsQuery = Get-Content -Path ".\sql-queries\popular-items.sql" -Raw
+$sourceMenuQuery = Get-Content -Path ".\sql-queries\source-menu-analysis.sql" -Raw  
+$timeSeriesQuery = Get-Content -Path ".\sql-queries\time-series-analysis.sql" -Raw
 
-# Query for popular menu items
-$popularItemsQuery = @"
--- Query for popular menu items
-SELECT 
-    element_clicked,
-    COUNT(*) as view_count,
-    AVG(time_spent) as avg_time_spent,
-    MIN(time_spent) as min_time_spent,
-    MAX(time_spent) as max_time_spent
-FROM 
-    my_ingested_data
-GROUP BY 
-    element_clicked
-ORDER BY 
-    view_count DESC;
-"@
-
-# Query for source menu analysis
-$sourceMenuQuery = @"
--- Query for source menu analysis
-SELECT 
-    source_menu,
-    COUNT(*) as view_count,
-    AVG(time_spent) as avg_time_spent
-FROM 
-    my_ingested_data
-GROUP BY 
-    source_menu
-ORDER BY 
-    view_count DESC;
-"@
-
-# Query for time series analysis
-$timeSeriesQuery = @"
--- Query for time series analysis by hour
-SELECT 
-    datehour,
-    COUNT(*) as view_count
-FROM 
-    my_ingested_data
-GROUP BY 
-    datehour
-ORDER BY 
-    datehour ASC;
-"@
-
-# Write queries to files
+# Define query file paths
 $allDataQueryFile = Join-Path $sqlQueriesDir "all-data.sql"
 $popularItemsQueryFile = Join-Path $sqlQueriesDir "popular-items.sql"
 $sourceMenuQueryFile = Join-Path $sqlQueriesDir "source-menu-analysis.sql"
 $timeSeriesQueryFile = Join-Path $sqlQueriesDir "time-series-analysis.sql"
 
-Set-Content -Path $allDataQueryFile -Value $allDataQuery
-Set-Content -Path $popularItemsQueryFile -Value $popularItemsQuery
-Set-Content -Path $sourceMenuQueryFile -Value $sourceMenuQuery
-Set-Content -Path $timeSeriesQueryFile -Value $timeSeriesQuery
-
-Write-Host "Generated SQL queries for QuickSight in: $sqlQueriesDir" -ForegroundColor Cyan
+Write-Host "Using existing SQL queries from: $sqlQueriesDir" -ForegroundColor Cyan
 Write-Host "  - All Data Query: $allDataQueryFile" -ForegroundColor Cyan
 Write-Host "  - Popular Items Query: $popularItemsQueryFile" -ForegroundColor Cyan
 Write-Host "  - Source Menu Analysis Query: $sourceMenuQueryFile" -ForegroundColor Cyan

@@ -231,18 +231,11 @@ After deploying the Athena component, you can query your data in several ways:
    aws athena get-query-results --query-execution-id $queryExecutionId --region us-east-1
    ```
 
-3. **Analytics Query**: The deployment also creates an analytics query that groups data by element_clicked and calculates statistics:
-   ```sql
-   SELECT 
-     element_clicked, 
-     COUNT(*) as view_count, 
-     AVG(time_spent) as avg_time_spent,
-     MIN(time_spent) as min_time_spent,
-     MAX(time_spent) as max_time_spent
-   FROM my_ingested_data
-   GROUP BY element_clicked
-   ORDER BY view_count DESC
-   ```
+3. **Analytics Queries**: The deployment creates several pre-built analytics queries. You can find all SQL queries in the `infrastructure/sql-queries/` directory:
+   - `all-data.sql` - Basic query to retrieve all clickstream data
+   - `popular-items.sql` - Analysis of most popular clicked elements
+   - `source-menu-analysis.sql` - Analysis by source menu
+   - `time-series-analysis.sql` - Time-based analysis by hour
 
 ### Partition Projection
 
