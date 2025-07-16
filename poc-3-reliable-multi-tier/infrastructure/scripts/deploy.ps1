@@ -90,6 +90,24 @@ $ErrorActionPreference = "Stop"
 # Set up AWS profile for PowerShell modules
 if ($Profile) {
     Set-AWSCredential -ProfileName $Profile
+    Write-Host "Using AWS profile: $Profile"
+    # Verify the profile is working
+    try {
+        $identity = Get-STSCallerIdentity
+        Write-Host "Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "Failed to authenticate with profile '$Profile'. Please check your AWS configuration."
+        exit 1
+    }
+} else {
+    # Test default credentials
+    try {
+        $identity = Get-STSCallerIdentity
+        Write-Host "Using default AWS credentials. Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "No valid AWS credentials found. Please run 'aws configure' or specify a profile with -Profile parameter."
+        exit 1
+    }
 }
 
 # Import AWS PowerShell module if available

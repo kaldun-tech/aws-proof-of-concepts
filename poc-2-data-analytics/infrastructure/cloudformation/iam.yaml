@@ -44,11 +44,44 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref Environment
-        PolicyDocument:
+
+  # Firehose Delivery Role
+  FirehoseDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'FirehoseDeliveryRole-${Environment}'
+      AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: 'VisualEditor0'
-            Effect: 'Allow'
-            Action:
-              - 'firehose:PutRecord'
-            Resource: '*'
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FirehoseDeliveryPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                  - 'lambda:InvokeFunction'
+                Resource: '*'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  APIGatewayFirehoseRoleARN:
+    Description: ARN of the API Gateway Firehose Role
+    Value: !GetAtt APIGatewayFirehoseRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-APIGatewayFirehoseRoleARN'
+
+  FirehoseRoleARN:
+    Description: ARN of the Firehose Delivery Role
+    Value: !GetAtt FirehoseDeliveryRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FirehoseRoleARN'

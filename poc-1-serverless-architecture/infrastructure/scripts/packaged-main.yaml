@@ -33,7 +33,7 @@ Resources:
   SQSStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/81ede5061d5a1ab210bd8f2eb0231e0f.template
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/5dd3f7e800dff9eeaadd70f6d4e97561.template
       Parameters:
         Environment:
           Ref: Environment
@@ -88,7 +88,7 @@ Resources:
   APIGatewayStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/38fb0b933db59c4b6b04f77cba7ad3d2.template
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/b73d55e98260867968b5de4e6917b034.template
       Parameters:
         Environment:
           Ref: Environment

@@ -63,6 +63,23 @@ $templateDir = Join-Path $PSScriptRoot ".." "cloudformation"
 if ($Profile) {
     $env:AWS_PROFILE = $Profile
     Write-Host "Using AWS profile: $Profile"
+    # Verify the profile is working
+    try {
+        $identity = aws sts get-caller-identity --profile $Profile | ConvertFrom-Json
+        Write-Host "Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "Failed to authenticate with profile '$Profile'. Please check your AWS configuration."
+        exit 1
+    }
+} else {
+    # Test default credentials
+    try {
+        $identity = aws sts get-caller-identity | ConvertFrom-Json
+        Write-Host "Using default AWS credentials. Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "No valid AWS credentials found. Please run 'aws configure' or specify a profile with -Profile parameter."
+        exit 1
+    }
 }
 
 # Function to check if S3 bucket exists, create if it doesn't
