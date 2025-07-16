@@ -23,8 +23,14 @@
     The specific component to delete (all, iam, dynamodb, sqs, lambda, sns, api-gateway, main).
     Default is "all" which will delete all stacks in the correct order.
 
+.PARAMETER Profile
+    The AWS CLI profile to use for authentication. Optional - uses default profile if not specified.
+
 .EXAMPLE
     ./teardown.ps1 -Environment dev -Force $false
+
+.EXAMPLE
+    ./teardown.ps1 -Environment dev -Force $false -Profile my-sso-profile
 #>
 
 param (
@@ -43,13 +49,38 @@ param (
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("all", "iam", "dynamodb", "sqs", "lambda", "sns", "api-gateway", "main")]
-    [string]$Component = "all"
+    [string]$Component = "all",
+
+    [Parameter(Mandatory=$false)]
+    [string]$Profile = ""
 )
+
+# Set up AWS CLI profile parameter
+if ($Profile) {
+    $env:AWS_PROFILE = $Profile
+    Write-Host "Using AWS profile: $Profile"
+    # Verify the profile is working
+    try {
+        $identity = aws sts get-caller-identity --profile $Profile | ConvertFrom-Json
+        Write-Host "Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "Failed to authenticate with profile '$Profile'. Please check your AWS configuration."
+        exit 1
+    }
+} else {
+    # Test default credentials
+    try {
+        $identity = aws sts get-caller-identity | ConvertFrom-Json
+        Write-Host "Using default AWS credentials. Authenticated as: $($identity.Arn)"
+    } catch {
+        Write-Error "No valid AWS credentials found. Please run 'aws configure' or specify a profile with -Profile parameter."
+        exit 1
+    }
+}
 
 # Set the stack name prefix if not provided
 if (-not $StackNamePrefix) {
-    $projectName = "serverless-architecture"
-    $StackNamePrefix = "$projectName-$Environment"
+    $StackNamePrefix = "poc"
 }
 
 # Function to check if a stack exists
