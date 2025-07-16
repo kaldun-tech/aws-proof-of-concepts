@@ -69,7 +69,7 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:sqs:path/${AWS::AccountId}/${SQSQueueURL#*/}'
         Credentials: !ImportValue 
-          Fn::Sub: 'POC-IAM-${Environment}-APIGatewaySQSRoleARN'
+          !Sub 'POC-IAM-${Environment}-APIGatewaySQSRoleARN'
         RequestParameters:
           integration.request.header.Content-Type: "'application/x-www-form-urlencoded'"
         RequestTemplates:

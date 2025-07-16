@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: E-Commerce Serverless Architecture - Main Stack
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+    - dev
+    - test
+    - prod
+  EmailAddress:
+    Type: String
+    Description: Email address for SNS notifications
+    AllowedPattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+Resources:
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/0d5a3e51952ed4252ccbdae6ea7f554b.template
+      Parameters:
+        Environment:
+          Ref: Environment
+      TimeoutInMinutes: 10
+  DynamoDBStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/a15302320b3da598a82d0f28e1d90615.template
+      Parameters:
+        Environment:
+          Ref: Environment
+      TimeoutInMinutes: 10
+  SQSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/81ede5061d5a1ab210bd8f2eb0231e0f.template
+      Parameters:
+        Environment:
+          Ref: Environment
+      TimeoutInMinutes: 10
+  SNSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/f7198ff1d492fed822035e40cfa638b9.template
+      Parameters:
+        Environment:
+          Ref: Environment
+        EmailAddress:
+          Ref: EmailAddress
+      TimeoutInMinutes: 10
+  LambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/b64e3ed23e6c1d0accf6d0b5fcd805af.template
+      Parameters:
+        Environment:
+          Ref: Environment
+        DynamoDBTableName:
+          Fn::GetAtt:
+          - DynamoDBStack
+          - Outputs.TableName
+        SQSQueueURL:
+          Fn::GetAtt:
+          - SQSStack
+          - Outputs.QueueURL
+        SQSQueueARN:
+          Fn::GetAtt:
+          - SQSStack
+          - Outputs.QueueARN
+        SNSTopicARN:
+          Fn::GetAtt:
+          - SNSStack
+          - Outputs.TopicARN
+        LambdaSQSDynamoDBRoleARN:
+          Fn::GetAtt:
+          - IAMStack
+          - Outputs.LambdaSQSDynamoDBRoleARN
+        LambdaDynamoDBSNSRoleARN:
+          Fn::GetAtt:
+          - IAMStack
+          - Outputs.LambdaDynamoDBSNSRoleARN
+      TimeoutInMinutes: 10
+      DependsOn:
+      - IAMStack
+      - DynamoDBStack
+      - SQSStack
+      - SNSStack
+  APIGatewayStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/38fb0b933db59c4b6b04f77cba7ad3d2.template
+      Parameters:
+        Environment:
+          Ref: Environment
+        SQSQueueURL:
+          Fn::GetAtt:
+          - SQSStack
+          - Outputs.QueueURL
+        SQSQueueARN:
+          Fn::GetAtt:
+          - SQSStack
+          - Outputs.QueueARN
+      TimeoutInMinutes: 10
+      DependsOn:
+      - SQSStack
+  CloudWatchStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/cf-poc1-kaldun/0460608902c36e00602d69e6cca4f88e.template
+      Parameters:
+        Environment:
+          Ref: Environment
+        SNSTopicARN:
+          Fn::GetAtt:
+          - SNSStack
+          - Outputs.TopicARN
+        APIGatewayName: POC-API
+        Lambda1FunctionName: POC-Lambda-1
+        Lambda2FunctionName: POC-Lambda-2
+        SQSQueueName: POC-Queue
+        DynamoDBTableName: ecommerce-orders
+      TimeoutInMinutes: 10
+      DependsOn:
+      - SNSStack
+      - LambdaStack
+      - APIGatewayStack
+      - DynamoDBStack
+Outputs:
+  APIEndpoint:
+    Description: URL of the API Gateway endpoint
+    Value:
+      Fn::GetAtt:
+      - APIGatewayStack
+      - Outputs.APIEndpoint
+  DynamoDBTableName:
+    Description: Name of the DynamoDB table
+    Value:
+      Fn::GetAtt:
+      - DynamoDBStack
+      - Outputs.TableName
+  SQSQueueURL:
+    Description: URL of the SQS queue
+    Value:
+      Fn::GetAtt:
+      - SQSStack
+      - Outputs.QueueURL
+  SNSTopicARN:
+    Description: ARN of the SNS topic
+    Value:
+      Fn::GetAtt:
+      - SNSStack
+      - Outputs.TopicARN
