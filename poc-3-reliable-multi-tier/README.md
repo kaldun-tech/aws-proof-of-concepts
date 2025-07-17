@@ -31,20 +31,33 @@ To deploy the infrastructure, use the provided `deploy.ps1` script:
 cd poc-3-reliable-multi-tier\infrastructure\scripts
 .\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name
 
+# Deploy with specific component only
+.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component vpc
+
+# Deploy with comprehensive testing
+.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -RunTests $true -TestSize comprehensive
+
 # Deploy with specific AWS profile (useful for SSO)
 .\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Profile my-sso-profile
+
+# Deploy with failover testing (will terminate instances for testing)
+.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -IncludeFailoverTest $true
 ```
 
-### Parameters
+### Deploy Parameters
 
-| Parameter | Description | Required | Default |
-|-----------|-------------|----------|--------|
-| Environment | Deployment environment (dev, test, prod) | Yes | - |
-| EmailAddress | Email address for notifications | Yes | - |
-| S3BucketName | S3 bucket name for CloudFormation templates (created automatically if it doesn't exist) | Yes | - |
-| Region | AWS region to deploy to | No | us-east-1 |
-| StackNamePrefix | Prefix for CloudFormation stack names | No | WebApp1 |
-| Profile | AWS CLI profile to use for authentication | No | default |
+| Parameter | Description | Required | Default | Options |
+|-----------|-------------|----------|---------|---------|
+| Environment | Deployment environment | Yes | - | dev, test, prod |
+| EmailAddress | Email address for notifications | Yes | - | - |
+| S3BucketName | S3 bucket name for CloudFormation templates (created automatically if it doesn't exist) | Yes | - | - |
+| Region | AWS region to deploy to | No | us-east-1 | - |
+| StackNamePrefix | Prefix for CloudFormation stack names | No | WebApp1 | - |
+| Component | Component to deploy | No | all | vpc, webapp, all |
+| RunTests | Whether to run tests after deployment | No | $true | $true, $false |
+| TestSize | Size of tests to run | No | standard | minimal, standard, comprehensive |
+| IncludeFailoverTest | Include failover testing (will terminate instances) | No | $false | $true, $false |
+| Profile | AWS CLI profile to use for authentication | No | default | - |
 
 ## Teardown
 
@@ -53,16 +66,24 @@ To remove the deployed infrastructure, use the provided `teardown.ps1` script:
 ```powershell
 cd poc-3-reliable-multi-tier\infrastructure\scripts
 .\teardown.ps1 -Environment dev -Force $false
+
+# Teardown with specific component only
+.\teardown.ps1 -Environment dev -Component webapp
+
+# Teardown with AWS profile
+.\teardown.ps1 -Environment dev -Profile my-sso-profile -Force $true
 ```
 
-### Parameters
+### Teardown Parameters
 
-| Parameter | Description | Required | Default |
-|-----------|-------------|----------|--------|
-| Environment | Environment name (dev, test, prod) | No | dev |
-| StackNamePrefix | Prefix used for all stack names | No | WebApp1 |
-| Region | AWS region where stacks are deployed | No | us-east-1 |
-| Force | Skip confirmation prompt | No | $false |
+| Parameter | Description | Required | Default | Options |
+|-----------|-------------|----------|---------|---------|
+| Environment | Environment name | No | dev | dev, test, prod |
+| StackNamePrefix | Prefix used for all stack names | No | WebApp1 | - |
+| Region | AWS region where stacks are deployed | No | us-east-1 | - |
+| Force | Skip confirmation prompt | No | $false | $true, $false |
+| Component | Component to delete | No | all | vpc, webapp, all |
+| Profile | AWS CLI profile to use for authentication | No | default | - |
 
 ## Reliability Features
 

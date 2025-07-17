@@ -87,13 +87,13 @@ param(
 # Set error action preference
 $ErrorActionPreference = "Stop"
 
-# Set up AWS profile for PowerShell modules
+# Set up AWS CLI profile parameter
 if ($Profile) {
-    Set-AWSCredential -ProfileName $Profile
+    $env:AWS_PROFILE = $Profile
     Write-Host "Using AWS profile: $Profile"
     # Verify the profile is working
     try {
-        $identity = Get-STSCallerIdentity
+        $identity = aws sts get-caller-identity --profile $Profile | ConvertFrom-Json
         Write-Host "Authenticated as: $($identity.Arn)"
     } catch {
         Write-Error "Failed to authenticate with profile '$Profile'. Please check your AWS configuration."
@@ -102,7 +102,7 @@ if ($Profile) {
 } else {
     # Test default credentials
     try {
-        $identity = Get-STSCallerIdentity
+        $identity = aws sts get-caller-identity | ConvertFrom-Json
         Write-Host "Using default AWS credentials. Authenticated as: $($identity.Arn)"
     } catch {
         Write-Error "No valid AWS credentials found. Please run 'aws configure' or specify a profile with -Profile parameter."
@@ -110,18 +110,7 @@ if ($Profile) {
     }
 }
 
-# Import AWS PowerShell module if available
-if (Get-Module -ListAvailable -Name AWSPowerShell) {
-    Import-Module AWSPowerShell
-} elseif (Get-Module -ListAvailable -Name AWSPowerShell.NetCore) {
-    Import-Module AWSPowerShell.NetCore
-} else {
-    Write-Error "AWS PowerShell module not found. Please install the AWS Tools for PowerShell."
-    exit 1
-}
-
-# Set AWS region
-Set-DefaultAWSRegion -Region $Region
+# AWS CLI is used for all operations - no PowerShell modules needed
 
 # Function to check if a stack exists
 function Test-StackExists {
@@ -130,9 +119,10 @@ function Test-StackExists {
     )
     
     try {
-        $stack = Get-CFNStack -StackName $StackName -ErrorAction SilentlyContinue
-        return $true
-    } catch {
+        aws cloudformation describe-stacks --stack-name $StackName --region $Region 2>$null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
         return $false
     }
 }
@@ -147,19 +137,24 @@ function Wait-StackOperation {
     Write-Host "Waiting for $Operation operation to complete on stack $StackName..."
     
     do {
-        $stack = Get-CFNStack -StackName $StackName
-        $status = $stack.StackStatus
-        
-        if ($status -like "*COMPLETE") {
-            Write-Host "Stack $StackName $Operation completed successfully with status: $status"
-            return $true
-        } elseif ($status -like "*FAILED" -or $status -like "*ROLLBACK*") {
-            Write-Host "Stack $StackName $Operation failed with status: $status"
+        try {
+            $status = aws cloudformation describe-stacks --stack-name $StackName --query "Stacks[0].StackStatus" --output text --region $Region
+            
+            if ($status -like "*COMPLETE") {
+                Write-Host "Stack $StackName $Operation completed successfully with status: $status"
+                return $true
+            } elseif ($status -like "*FAILED" -or $status -like "*ROLLBACK*") {
+                Write-Host "Stack $StackName $Operation failed with status: $status"
+                return $false
+            }
+            
+            Write-Host "Current status: $status - waiting 10 seconds..."
+            Start-Sleep -Seconds 10
+        }
+        catch {
+            Write-Host "Error checking stack status: $_"
             return $false
         }
-        
-        Write-Host "Current status: $status - waiting 10 seconds..."
-        Start-Sleep -Seconds 10
     } while ($true)
 }
 
@@ -173,14 +168,14 @@ function Upload-TemplatesToS3 {
     
     # Check if bucket exists, create if not
     try {
-        $bucketExists = Get-S3Bucket -BucketName $BucketName -ErrorAction SilentlyContinue
-        if (-not $bucketExists) {
+        aws s3api head-bucket --bucket $BucketName --region $Region 2>$null
+        if ($LASTEXITCODE -ne 0) {
             Write-Host "Creating S3 bucket: $BucketName"
-            New-S3Bucket -BucketName $BucketName -Region $Region
+            aws s3 mb s3://$BucketName --region $Region
         }
     } catch {
         Write-Host "Creating S3 bucket: $BucketName"
-        New-S3Bucket -BucketName $BucketName -Region $Region
+        aws s3 mb s3://$BucketName --region $Region
     }
     
     # Upload templates
@@ -189,7 +184,7 @@ function Upload-TemplatesToS3 {
     
     foreach ($template in $templates) {
         Write-Host "Uploading template: $($template.Name)"
-        Write-S3Object -BucketName $BucketName -File $template.FullName -Key "templates/$($template.Name)" -PublicReadOnly
+        aws s3 cp $template.FullName s3://$BucketName/templates/$($template.Name) --region $Region
     }
     
     Write-Host "Templates uploaded successfully."
