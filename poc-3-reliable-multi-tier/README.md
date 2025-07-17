@@ -34,14 +34,11 @@ cd poc-3-reliable-multi-tier\infrastructure\scripts
 # Deploy with specific component only
 .\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component vpc
 
-# Deploy with comprehensive testing
-.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -RunTests $true -TestSize comprehensive
+# Deploy with testing enabled
+.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -RunTests $true
 
 # Deploy with specific AWS profile (useful for SSO)
 .\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Profile my-sso-profile
-
-# Deploy with failover testing (will terminate instances for testing)
-.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -IncludeFailoverTest $true
 ```
 
 ### Deploy Parameters
@@ -55,8 +52,6 @@ cd poc-3-reliable-multi-tier\infrastructure\scripts
 | StackNamePrefix | Prefix for CloudFormation stack names | No | WebApp1 | - |
 | Component | Component to deploy | No | all | vpc, webapp, all |
 | RunTests | Whether to run tests after deployment | No | $true | $true, $false |
-| TestSize | Size of tests to run | No | standard | minimal, standard, comprehensive |
-| IncludeFailoverTest | Include failover testing (will terminate instances) | No | $false | $true, $false |
 | Profile | AWS CLI profile to use for authentication | No | default | - |
 
 ## Teardown
