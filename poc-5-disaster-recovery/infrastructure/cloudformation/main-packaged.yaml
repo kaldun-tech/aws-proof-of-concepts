@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Disaster Recovery POC - Main Stack
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+    - dev
+    - test
+    - prod
+  BackupBucketName:
+    Type: String
+    Description: Name of the S3 bucket for backups (must be globally unique)
+    AllowedPattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+    ConstraintDescription: Bucket name must be lowercase, contain only letters, numbers,
+      and hyphens
+  UserEmail:
+    Type: String
+    Description: Email address for backup notifications
+    AllowedPattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+  RetentionYears:
+    Type: Number
+    Default: 7
+    Description: Number of years to retain backups
+    MinValue: 1
+    MaxValue: 10
+  CostThresholdUSD:
+    Type: Number
+    Default: 50
+    Description: Monthly cost threshold for alerts (USD)
+    MinValue: 1
+    MaxValue: 1000
+Resources:
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/9016a0da6e9452e879078f435eceddb8.template
+      Parameters:
+        Environment:
+          Ref: Environment
+        BackupBucketName:
+          Ref: BackupBucketName
+      TimeoutInMinutes: 10
+  S3Stack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/e4c017ccecf00a0b4add1e3c492d9db5.template
+      Parameters:
+        Environment:
+          Ref: Environment
+        BackupBucketName:
+          Ref: BackupBucketName
+        RetentionYears:
+          Ref: RetentionYears
+        BackupUserArn:
+          Fn::GetAtt:
+          - IAMStack
+          - Outputs.BackupUserArn
+      TimeoutInMinutes: 15
+      DependsOn:
+      - IAMStack
+  CloudWatchStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/1dea21fd2812f5a9a6492aa2e3bb0e29.template
+      Parameters:
+        Environment:
+          Ref: Environment
+        BackupBucketName:
+          Ref: BackupBucketName
+        UserEmail:
+          Ref: UserEmail
+        CostThresholdUSD:
+          Ref: CostThresholdUSD
+      TimeoutInMinutes: 10
+      DependsOn:
+      - S3Stack
+      - IAMStack
+Outputs:
+  BackupBucketName:
+    Description: Name of the backup S3 bucket
+    Value:
+      Fn::GetAtt:
+      - S3Stack
+      - Outputs.BucketName
+  BackupBucketArn:
+    Description: ARN of the backup S3 bucket
+    Value:
+      Fn::GetAtt:
+      - S3Stack
+      - Outputs.BucketArn
+  BackupUserName:
+    Description: Name of the IAM user for backup operations
+    Value:
+      Fn::GetAtt:
+      - IAMStack
+      - Outputs.BackupUserName
+  AccessKeyId:
+    Description: Access Key ID for the backup user
+    Value:
+      Fn::GetAtt:
+      - IAMStack
+      - Outputs.AccessKeyId
+  SecretAccessKey:
+    Description: Secret Access Key for the backup user (store securely)
+    Value:
+      Fn::GetAtt:
+      - IAMStack
+      - Outputs.SecretAccessKey
+  NotificationTopicArn:
+    Description: ARN of the SNS topic for notifications
+    Value:
+      Fn::GetAtt:
+      - CloudWatchStack
+      - Outputs.NotificationTopicArn
+  DashboardURL:
+    Description: URL of the CloudWatch dashboard
+    Value:
+      Fn::GetAtt:
+      - CloudWatchStack
+      - Outputs.DashboardURL
+  BackupLogGroupName:
+    Description: Name of the backup operations log group
+    Value:
+      Fn::GetAtt:
+      - CloudWatchStack
+      - Outputs.BackupLogGroupName
+  RestoreLogGroupName:
+    Description: Name of the restore operations log group
+    Value:
+      Fn::GetAtt:
+      - CloudWatchStack
+      - Outputs.RestoreLogGroupName
+  DeploymentSummary:
+    Description: Summary of deployed resources
+    Value:
+      Fn::Sub: "Disaster Recovery Infrastructure Deployed Successfully\n\nEnvironment:\
+        \ ${Environment}\nBackup Bucket: ${BackupBucketName}\nRetention Period: ${RetentionYears}\
+        \ years\nCost Alert Threshold: $${CostThresholdUSD} USD/month\nNotification\
+        \ Email: ${UserEmail}\n\nNext Steps:\n1. Configure AWS CLI with the provided\
+        \ credentials\n2. Download and configure backup scripts\n3. Run initial backup\
+        \ test\n4. Set up backup scheduling\n\nDashboard: ${CloudWatchStack.Outputs.DashboardURL}"

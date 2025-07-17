@@ -120,6 +120,8 @@ cd infrastructure/scripts
 | UserEmail | Email address for backup notifications | Yes | - |
 | Region | AWS region for deployment | No | us-east-1 |
 | RetentionYears | Years to retain backups | No | 7 |
+| RunTests | A boolean flag to run validation tests after deployment. | No | `$true` |
+| TestSize | The scope of tests to run: `minimal` (stack validation), `standard` (+ local script tests), or `comprehensive` (+ end-to-end test). | No | `standard` |
 | Profile | AWS CLI profile to use for authentication | No | default |
 
 ### Setting Up Backups

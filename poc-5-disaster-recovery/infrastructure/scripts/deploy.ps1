@@ -32,7 +32,10 @@
     Run validation tests after deployment (default: true).
 
 .PARAMETER TestSize
-    Size of tests to run (minimal, standard, comprehensive).
+    The scope of validation tests to run after deployment.
+    - minimal: Validates that the CloudFormation stacks were created successfully.
+    - standard: Includes 'minimal' tests and also runs local tests on the backup script's logic.
+    - comprehensive: Includes all 'standard' tests and performs a full end-to-end test, which involves backing up and restoring a small sample dataset to verify the entire workflow.
 
 .PARAMETER Profile
     The AWS CLI profile to use for authentication. Optional - uses default profile if not specified.
