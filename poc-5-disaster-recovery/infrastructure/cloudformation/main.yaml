@@ -50,6 +50,8 @@ Resources:
   # S3 Stack - Deploy after IAM to reference user ARN
   S3Stack:
     Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - IAMStack
     Properties:
       TemplateURL: ./s3.yaml
       Parameters:
@@ -58,12 +60,13 @@ Resources:
         RetentionYears: !Ref RetentionYears
         BackupUserArn: !GetAtt IAMStack.Outputs.BackupUserArn
       TimeoutInMinutes: 15
-      DependsOn:
-        - IAMStack
 
   # CloudWatch Stack - Deploy last for monitoring
   CloudWatchStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - S3Stack
+      - IAMStack
     Properties:
       TemplateURL: ./cloudwatch.yaml
       Parameters:
@@ -72,9 +75,6 @@ Resources:
         UserEmail: !Ref UserEmail
         CostThresholdUSD: !Ref CostThresholdUSD
       TimeoutInMinutes: 10
-      DependsOn:
-        - S3Stack
-        - IAMStack
 
 Outputs:
   # Infrastructure Information
