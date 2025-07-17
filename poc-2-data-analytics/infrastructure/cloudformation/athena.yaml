@@ -27,6 +27,7 @@ Resources:
   # Athena Workgroup
   AthenaWorkGroup:
     Type: AWS::Athena::WorkGroup
+    DeletionPolicy: Delete
     Properties:
       Name: !Sub 'data-analytics-workgroup-${Environment}'
       Description: !Sub 'Workgroup for data analytics POC - ${Environment}'
@@ -45,6 +46,7 @@ Resources:
   # Athena Named Query to create the table
   AthenaCreateTableQuery:
     Type: AWS::Athena::NamedQuery
+    DeletionPolicy: Delete
     Properties:
       Name: !Sub 'create-clickstream-table-${Environment}'
       Description: 'Query to create the clickstream data table'
@@ -81,6 +83,7 @@ Resources:
   # Athena Named Query to select data
   AthenaSelectDataQuery:
     Type: AWS::Athena::NamedQuery
+    DeletionPolicy: Delete
     Properties:
       Name: !Sub 'select-clickstream-data-${Environment}'
       Description: 'Query to select all data from the clickstream table'

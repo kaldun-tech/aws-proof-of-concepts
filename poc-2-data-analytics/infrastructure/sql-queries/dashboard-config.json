@@ -1,55 +1,4 @@
 {
-  "dashboardName": "Clickstream Analytics Dashboard",
-  "visualizations": [
-    {
-      "name": "Menu Item Popularity",
-      "type": "BAR_CHART",
-      "dimensions": [
-        "element_clicked"
-      ],
-      "measures": [
-        "COUNT(*)"
-      ],
-      "sortBy": {
-        "field": "COUNT(*)",
-        "direction": "DESC"
-      }
-    },
-    {
-      "name": "Time Spent Analysis",
-      "type": "BOX_PLOT",
-      "dimensions": [
-        "element_clicked"
-      ],
-      "measures": [
-        "time_spent"
-      ]
-    },
-    {
-      "name": "Source Menu Analysis",
-      "type": "PIE_CHART",
-      "dimensions": [
-        "source_menu"
-      ],
-      "measures": [
-        "COUNT(*)"
-      ]
-    },
-    {
-      "name": "Time Series Analysis",
-      "type": "LINE_CHART",
-      "dimensions": [
-        "datehour"
-      ],
-      "measures": [
-        "COUNT(*)"
-      ],
-      "sortBy": {
-        "field": "datehour",
-        "direction": "ASC"
-      }
-    }
-  ],
   "filters": [
     {
       "name": "Date Range Filter",
@@ -67,7 +16,55 @@
       "type": "RANGE"
     }
   ],
-  "refreshSchedule": {
-    "frequency": "HOURLY"
-  }
+  "visualizations": [
+    {
+      "name": "Menu Item Popularity",
+      "dimensions": [
+        "element_clicked"
+      ],
+      "measures": [
+        "COUNT(*)"
+      ],
+      "type": "BAR_CHART",
+      "sortBy": {
+        "direction": "DESC",
+        "field": "COUNT(*)"
+      }
+    },
+    {
+      "name": "Time Spent Analysis",
+      "dimensions": [
+        "element_clicked"
+      ],
+      "measures": [
+        "time_spent"
+      ],
+      "type": "BOX_PLOT"
+    },
+    {
+      "name": "Source Menu Analysis",
+      "dimensions": [
+        "source_menu"
+      ],
+      "measures": [
+        "COUNT(*)"
+      ],
+      "type": "PIE_CHART"
+    },
+    {
+      "name": "Time Series Analysis",
+      "dimensions": [
+        "datehour"
+      ],
+      "measures": [
+        "COUNT(*)"
+      ],
+      "type": "LINE_CHART",
+      "sortBy": {
+        "direction": "ASC",
+        "field": "datehour"
+      }
+    }
+  ],
+  "dashboardName": "Clickstream Analytics Dashboard - dev"
 }
