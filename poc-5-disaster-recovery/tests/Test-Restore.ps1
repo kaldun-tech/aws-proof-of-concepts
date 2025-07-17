@@ -24,14 +24,14 @@
 #>
 
 param (
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [ValidateSet("simulation", "integration", "cost-estimate")]
     [string]$TestType = "simulation",
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$MockData,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$Verbose
 )
 
@@ -40,12 +40,12 @@ $ErrorActionPreference = "Continue"
 
 # Test results tracking
 $script:TestResults = @{
-    TotalTests = 0
-    PassedTests = 0
-    FailedTests = 0
+    TotalTests   = 0
+    PassedTests  = 0
+    FailedTests  = 0
     SkippedTests = 0
-    Errors = @()
-    StartTime = Get-Date
+    Errors       = @()
+    StartTime    = Get-Date
 }
 
 # Function to write test output
@@ -63,7 +63,8 @@ function Write-TestResult {
         $script:TestResults.PassedTests++
         $status = "PASS"
         $color = "Green"
-    } else {
+    }
+    else {
         $script:TestResults.FailedTests++
         $status = "FAIL"
         $color = "Red"
@@ -114,8 +115,8 @@ function New-MockBackupData {
         foreach ($date in $backupDates) {
             $datePath = $date -replace '-', '/'
             $mockBackup = @{
-                Key = "backups/$datePath/PersonalFiles-$($date).zip"
-                Size = Get-Random -Minimum 1048576 -Maximum 104857600  # 1MB to 100MB
+                Key          = "backups/$datePath/PersonalFiles-$($date).zip"
+                Size         = Get-Random -Minimum 1048576 -Maximum 104857600  # 1MB to 100MB
                 LastModified = (Get-Date $date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
                 StorageClass = "DEEP_ARCHIVE"
             }
@@ -133,10 +134,11 @@ function New-MockBackupData {
         return @{
             DataPath = $mockDataPath
             DataFile = $mockDataFile
-            Backups = $mockBackups
+            Backups  = $mockBackups
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Mock backup data creation" $false $_.Exception.Message
         throw
     }
@@ -162,7 +164,8 @@ function Test-RestoreScriptValidation {
             $scriptContent = Get-Content $restoreScript -Raw
             [System.Management.Automation.PSParser]::Tokenize($scriptContent, [ref]$null) | Out-Null
             Write-TestResult "Restore script syntax valid" $true
-        } catch {
+        }
+        catch {
             Write-TestResult "Restore script syntax valid" $false $_.Exception.Message
         }
         
@@ -170,9 +173,10 @@ function Test-RestoreScriptValidation {
         try {
             $scriptHelp = Get-Help $restoreScript -ErrorAction SilentlyContinue
             $hasRequiredParams = $scriptHelp.parameters -and 
-                                ($scriptHelp.parameters.parameter | Where-Object { $_.name -eq "Action" })
+            ($scriptHelp.parameters.parameter | Where-Object { $_.name -eq "Action" })
             Write-TestResult "Restore script has required parameters" $hasRequiredParams
-        } catch {
+        }
+        catch {
             Write-TestResult "Restore script has required parameters" $false "Could not get script help"
         }
         
@@ -183,12 +187,14 @@ function Test-RestoreScriptValidation {
                 $helpText = & $restoreScript -Action $action -? 2>&1 | Out-String
                 $actionSupported = $helpText -notlike "*parameter set cannot be resolved*"
                 Write-TestResult "Action '$action' supported" $actionSupported
-            } catch {
+            }
+            catch {
                 Write-TestResult "Action '$action' supported" $false $_.Exception.Message
             }
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Restore script validation" $false $_.Exception.Message
     }
 }
@@ -224,7 +230,8 @@ function Test-RestoreCostCalculations {
             }
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Restore cost calculations" $false $_.Exception.Message
     }
 }
@@ -237,13 +244,13 @@ function Test-JobTrackingFunctionality {
         # Create mock job data
         $mockJobId = (New-Guid).ToString()
         $mockJob = @{
-            JobId = $mockJobId
-            InitiatedTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            BackupDate = "2024-01-15"
-            RestoreType = "standard"
-            TotalFiles = 3
+            JobId          = $mockJobId
+            InitiatedTime  = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            BackupDate     = "2024-01-15"
+            RestoreType    = "standard"
+            TotalFiles     = 3
             TotalSizeBytes = 104857600  # 100MB
-            Files = @(
+            Files          = @(
                 @{ Key = "backups/2024/01/15/Documents-2024-01-15.zip"; Status = "InProgress"; Size = 52428800 },
                 @{ Key = "backups/2024/01/15/Pictures-2024-01-15.zip"; Status = "InProgress"; Size = 31457280 },
                 @{ Key = "backups/2024/01/15/Music-2024-01-15.zip"; Status = "InProgress"; Size = 20971520 }
@@ -263,21 +270,23 @@ function Test-JobTrackingFunctionality {
                 $loadedJob = Get-Content $jobFile | ConvertFrom-Json
                 $dataMatches = $loadedJob.JobId -eq $mockJobId -and $loadedJob.TotalFiles -eq 3
                 Write-TestResult "Job file data integrity" $dataMatches "JobId: $($loadedJob.JobId)"
-            } catch {
+            }
+            catch {
                 Write-TestResult "Job file data integrity" $false $_.Exception.Message
             }
             
             # Test job properties
             $hasRequiredProps = $loadedJob.PSObject.Properties.Name -contains "JobId" -and
-                               $loadedJob.PSObject.Properties.Name -contains "InitiatedTime" -and
-                               $loadedJob.PSObject.Properties.Name -contains "Files"
+            $loadedJob.PSObject.Properties.Name -contains "InitiatedTime" -and
+            $loadedJob.PSObject.Properties.Name -contains "Files"
             Write-TestResult "Job file has required properties" $hasRequiredProps
             
             # Cleanup
             Remove-Item $jobFile -Force -ErrorAction SilentlyContinue
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Job tracking functionality" $false $_.Exception.Message
     }
 }
@@ -297,23 +306,27 @@ function Test-RestoreStatusSimulation {
         foreach ($test in $statusTests) {
             try {
                 # Simulate status parsing logic
-                if ($test.Status -eq $null) {
+                if ($null -eq $test.Status) {
                     $parsedStatus = "Not Restored"
-                } elseif ($test.Status -like "*ongoing-request=`"false`"*") {
+                }
+                elseif ($test.Status -like "*ongoing-request=`"false`"*") {
                     $parsedStatus = "Ready"
-                } else {
+                }
+                else {
                     $parsedStatus = "In Progress"
                 }
                 
                 $statusCorrect = $parsedStatus -eq $test.Expected
                 Write-TestResult "Status parsing: $($test.Description)" $statusCorrect "Expected: $($test.Expected), Got: $parsedStatus" -Details $test.Status
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Status parsing: $($test.Description)" $false $_.Exception.Message
             }
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Restore status simulation" $false $_.Exception.Message
     }
 }
@@ -353,12 +366,14 @@ function Test-FileFilteringFunctionality {
                 $filterCorrect = $matchCount -eq $test.Expected
                 Write-TestResult "File filtering: $($test.Description)" $filterCorrect "Expected: $($test.Expected), Found: $matchCount" -Details "Pattern: $($test.Pattern)"
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "File filtering: $($test.Description)" $false $_.Exception.Message
             }
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "File filtering functionality" $false $_.Exception.Message
     }
 }
@@ -396,11 +411,13 @@ function Test-DownloadSimulation {
                     $downloadedCount++
                     $totalSize += $fileInfo.Length
                     Write-TestResult "Download simulation: $($download.FileName)" $true "Size: $([math]::Round($fileInfo.Length / 1KB, 1)) KB"
-                } else {
+                }
+                else {
                     Write-TestResult "Download simulation: $($download.FileName)" $false "File not created"
                 }
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Download simulation: $($download.FileName)" $false $_.Exception.Message
             }
         }
@@ -413,7 +430,8 @@ function Test-DownloadSimulation {
         # Cleanup
         Remove-Item $downloadPath -Recurse -Force -ErrorAction SilentlyContinue
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Download simulation" $false $_.Exception.Message
     }
 }
@@ -436,23 +454,23 @@ function Test-ErrorHandlingScenarios {
             # Simulate job file not found error
             $jobNotFound = !(Test-Path $invalidJobFile)
             Write-TestResult "Invalid job ID handling" $jobNotFound "Job file should not exist"
-        } catch {
+        }
+        catch {
             Write-TestResult "Invalid job ID handling" $true "Error handled gracefully: $($_.Exception.Message)"
         }
         
         # Test invalid backup date handling
         $invalidDates = @("2024-13-01", "invalid-date", "2024/01/01", "")
         foreach ($date in $invalidDates) {
-            try {
-                # Simulate date validation
-                if ($date -match '^\d{4}-\d{2}-\d{2}$') {
-                    $parsedDate = [DateTime]::ParseExact($date, "yyyy-MM-dd", $null)
+            $validDate = $false
+            # Simulate date validation
+            if ($date -match '^\d{4}-\d{2}-\d{2}$') {
+                # Try to parse the date without storing the unused result
+                try {
+                    [DateTime]::ParseExact($date, "yyyy-MM-dd", $null) | Out-Null
                     $validDate = $true
-                } else {
-                    $validDate = $false
                 }
-            } catch {
-                $validDate = $false
+                catch {}
             }
             
             $expectedInvalid = $date -in @("2024-13-01", "invalid-date", "2024/01/01", "")
@@ -467,7 +485,8 @@ function Test-ErrorHandlingScenarios {
             Write-TestResult "Empty destination path handling" $pathInvalid "Path: '$path'"
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Error handling scenarios" $false $_.Exception.Message
     }
 }
@@ -498,16 +517,17 @@ function Test-BackupSystemIntegration {
                 $hasBackupName = $config.PSObject.Properties.Name -contains "backupName"
                 $hasPaths = $config.PSObject.Properties.Name -contains "paths"
                 Write-TestResult "Backup config structure valid" ($hasBackupName -and $hasPaths)
-            } catch {
+            }
+            catch {
                 Write-TestResult "Backup config structure valid" $false $_.Exception.Message
             }
         }
         
         # Test restore script can read backup metadata format
         $mockMetadata = @{
-            backupId = (New-Guid).ToString()
-            timestamp = Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fffZ"
-            files = @(
+            backupId    = (New-Guid).ToString()
+            timestamp   = Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fffZ"
+            files       = @(
                 @{ name = "Documents"; path = "backups/2024/01/15/Documents.zip"; size = 1048576 },
                 @{ name = "Pictures"; path = "backups/2024/01/15/Pictures.zip"; size = 5242880 }
             )
@@ -519,11 +539,13 @@ function Test-BackupSystemIntegration {
             $parsedMetadata = $metadataJson | ConvertFrom-Json
             $metadataValid = $parsedMetadata.backupId -eq $mockMetadata.backupId
             Write-TestResult "Metadata format compatibility" $metadataValid
-        } catch {
+        }
+        catch {
             Write-TestResult "Metadata format compatibility" $false $_.Exception.Message
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Backup system integration" $false $_.Exception.Message
     }
 }
@@ -576,7 +598,8 @@ function Invoke-RestoreTests {
     if ($mockData -and $mockData.DataPath) {
         try {
             Remove-Item $mockData.DataPath -Recurse -Force -ErrorAction SilentlyContinue
-        } catch {
+        }
+        catch {
             Write-Host "Note: Could not cleanup mock data at $($mockData.DataPath)" -ForegroundColor Yellow
         }
     }
@@ -595,8 +618,8 @@ function Invoke-RestoreTests {
     
     if ($script:TestResults.FailedTests -gt 0) {
         Write-Host "Failed Tests:" -ForegroundColor Red
-        foreach ($error in $script:TestResults.Errors) {
-            Write-Host "  - $error" -ForegroundColor Red
+        foreach ($next_err in $script:TestResults.Errors) {
+            Write-Host "  - $next_err" -ForegroundColor Red
         }
         Write-Host ""
     }
@@ -606,10 +629,12 @@ function Invoke-RestoreTests {
     if ($script:TestResults.FailedTests -eq 0) {
         Write-Host "🎉 All restore tests passed! Restore functionality is working correctly." -ForegroundColor Green
         return 0
-    } elseif ($successRate -ge 80) {
+    }
+    elseif ($successRate -ge 80) {
         Write-Host "⚠️  Most restore tests passed ($successRate%). Check failed tests above." -ForegroundColor Yellow
         return 1
-    } else {
+    }
+    else {
         Write-Host "❌ Many restore tests failed ($successRate%). Restore functionality may have issues." -ForegroundColor Red
         return 2
     }
@@ -619,7 +644,8 @@ function Invoke-RestoreTests {
 try {
     $exitCode = Invoke-RestoreTests
     exit $exitCode
-} catch {
+}
+catch {
     Write-Host "❌ Restore test execution failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 3
 }

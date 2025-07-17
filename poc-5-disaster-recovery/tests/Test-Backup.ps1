@@ -30,19 +30,19 @@
 #>
 
 param (
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [string]$ConfigFile = "",
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$CreateTestData,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$CleanupTestData,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$TestUpload,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$Verbose
 )
 
@@ -51,12 +51,12 @@ $ErrorActionPreference = "Continue"
 
 # Test results tracking
 $script:TestResults = @{
-    TotalTests = 0
-    PassedTests = 0
-    FailedTests = 0
+    TotalTests   = 0
+    PassedTests  = 0
+    FailedTests  = 0
     SkippedTests = 0
-    Errors = @()
-    StartTime = Get-Date
+    Errors       = @()
+    StartTime    = Get-Date
     TestDataPath = ""
 }
 
@@ -75,7 +75,8 @@ function Write-TestResult {
         $script:TestResults.PassedTests++
         $status = "PASS"
         $color = "Green"
-    } else {
+    }
+    else {
         $script:TestResults.FailedTests++
         $status = "FAIL"
         $color = "Red"
@@ -167,7 +168,8 @@ function New-TestData {
                 # Create file with specific size
                 $content = $file.Content * ($file.Size / $file.Content.Length)
                 $content | Out-File -FilePath $fullPath -Encoding UTF8 -NoNewline
-            } else {
+            }
+            else {
                 # Use actual content
                 $file.Content | Out-File -FilePath $fullPath -Encoding UTF8
             }
@@ -187,7 +189,8 @@ function New-TestData {
         
         return $testDataRoot
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Test data creation" $false $_.Exception.Message
         throw
     }
@@ -200,46 +203,46 @@ function New-TestConfiguration {
     )
     
     $testConfig = @{
-        backupName = "TestBackup"
+        backupName  = "TestBackup"
         compression = @{
             enabled = $true
-            level = 6
-            format = "zip"
+            level   = 6
+            format  = "zip"
         }
-        paths = @(
+        paths       = @(
             @{
-                name = "TestDocuments"
-                source = Join-Path $testDataPath "Documents"
+                name    = "TestDocuments"
+                source  = Join-Path $testDataPath "Documents"
                 include = @("*.pdf", "*.txt", "*.xlsx", "*.pptx")
                 exclude = @("temp/*", "*.tmp")
             },
             @{
-                name = "TestPictures"
-                source = Join-Path $testDataPath "Pictures"
+                name    = "TestPictures"
+                source  = Join-Path $testDataPath "Pictures"
                 include = @("*.jpg", "*.png", "*.cr2")
                 exclude = @("thumbnails/*")
             },
             @{
-                name = "TestVideos"
-                source = Join-Path $testDataPath "Videos"
+                name    = "TestVideos"
+                source  = Join-Path $testDataPath "Videos"
                 include = @("*.mp4", "*.avi")
                 exclude = @()
             },
             @{
-                name = "TestMusic"
-                source = Join-Path $testDataPath "Music"
+                name    = "TestMusic"
+                source  = Join-Path $testDataPath "Music"
                 include = @("*.mp3", "*.flac")
                 exclude = @()
             },
             @{
-                name = "TestDesktop"
-                source = Join-Path $testDataPath "Desktop"
+                name    = "TestDesktop"
+                source  = Join-Path $testDataPath "Desktop"
                 include = @("*.*")
                 exclude = @("*.lnk")
             },
             @{
-                name = "TestCustomData"
-                source = Join-Path $testDataPath "CustomData"
+                name    = "TestCustomData"
+                source  = Join-Path $testDataPath "CustomData"
                 include = @("*.dat", "*.xml")
                 exclude = @()
             }
@@ -273,7 +276,8 @@ function Test-ConfigurationValidation {
         try {
             $config = Get-Content $configPath | ConvertFrom-Json
             Write-TestResult "Configuration is valid JSON" $true
-        } catch {
+        }
+        catch {
             Write-TestResult "Configuration is valid JSON" $false $_.Exception.Message
             return
         }
@@ -318,7 +322,8 @@ function Test-ConfigurationValidation {
             Write-TestResult "Compression configuration valid" ($hasLevel -and $hasFormat) "Enabled: $compressionEnabled"
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Configuration validation" $false $_.Exception.Message
     }
 }
@@ -358,7 +363,8 @@ function Test-FileDiscovery {
                         $patternSize = ($files | Measure-Object -Property Length -Sum).Sum
                         $totalSizeBytes += $patternSize
                     }
-                } catch {
+                }
+                catch {
                     Write-TestResult "Include pattern '$includePattern' in '$pathName'" $false $_.Exception.Message
                 }
             }
@@ -376,7 +382,8 @@ function Test-FileDiscovery {
                             $excludeWorking = $true
                             break
                         }
-                    } catch {
+                    }
+                    catch {
                         # Exclude pattern testing failed, but this is not critical
                     }
                 }
@@ -386,7 +393,8 @@ function Test-FileDiscovery {
         
         Write-TestResult "Overall file discovery" ($totalFilesFound -gt 0) "Total files: $totalFilesFound, Size: $([math]::Round($totalSizeBytes / 1KB, 1)) KB"
         
-    } catch {
+    }
+    catch {
         Write-TestResult "File discovery tests" $false $_.Exception.Message
     }
 }
@@ -437,14 +445,17 @@ function Test-CompressionFunctionality {
                     Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
                 }
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Test archive created" $false $_.Exception.Message
             }
-        } else {
+        }
+        else {
             Skip-Test "Compression functionality" "No test documents directory found"
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Compression tests" $false $_.Exception.Message
     }
 }
@@ -473,7 +484,8 @@ function Test-BackupScriptExecution {
             $scriptContent = Get-Content $backupScript -Raw
             [System.Management.Automation.PSParser]::Tokenize($scriptContent, [ref]$null) | Out-Null
             Write-TestResult "Backup script syntax valid" $true
-        } catch {
+        }
+        catch {
             Write-TestResult "Backup script syntax valid" $false $_.Exception.Message
         }
         
@@ -482,14 +494,16 @@ function Test-BackupScriptExecution {
             $helpOutput = & $backupScript -? 2>&1
             $hasHelp = $helpOutput -like "*SYNOPSIS*" -or $helpOutput -like "*DESCRIPTION*"
             Write-TestResult "Backup script help available" $hasHelp
-        } catch {
+        }
+        catch {
             Write-TestResult "Backup script help available" $false $_.Exception.Message
         }
         
         # Test script with test mode (dry run)
         if ($TestUpload) {
             Skip-Test "Backup script dry run execution" "TestUpload specified - will test actual upload instead"
-        } else {
+        }
+        else {
             try {
                 Write-Host "    Running backup script in test mode..." -ForegroundColor Gray
                 $testOutput = & $backupScript -ConfigFile $configPath -TestMode $true -Verbose 2>&1
@@ -505,12 +519,14 @@ function Test-BackupScriptExecution {
                     $testOutput | ForEach-Object { Write-Host "        $_" -ForegroundColor Gray }
                 }
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Backup script dry run execution" $false $_.Exception.Message
             }
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Backup script execution tests" $false $_.Exception.Message
     }
 }
@@ -547,7 +563,8 @@ function Test-S3Upload {
         try {
             aws s3api head-bucket --bucket $bucketName 2>$null
             Write-TestResult "S3 bucket accessible for upload" ($LASTEXITCODE -eq 0)
-        } catch {
+        }
+        catch {
             Write-TestResult "S3 bucket accessible for upload" $false $_.Exception.Message
             return
         }
@@ -583,11 +600,13 @@ function Test-S3Upload {
                 $uploadOutput | ForEach-Object { Write-Host "        $_" -ForegroundColor Gray }
             }
             
-        } catch {
+        }
+        catch {
             Write-TestResult "Backup script S3 upload execution" $false $_.Exception.Message
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "S3 upload tests" $false $_.Exception.Message
     }
 }
@@ -611,10 +630,12 @@ function Remove-TestData {
             Remove-Item $testDataPath -Recurse -Force
             $cleanupSuccessful = !(Test-Path $testDataPath)
             Write-TestResult "Test data cleanup" $cleanupSuccessful "Path: $testDataPath"
-        } else {
+        }
+        else {
             Skip-Test "Test data cleanup" "No test data path specified or path does not exist"
         }
-    } catch {
+    }
+    catch {
         Write-TestResult "Test data cleanup" $false $_.Exception.Message
     }
 }
@@ -650,7 +671,8 @@ function Invoke-BackupTests {
         Test-FileDiscovery -configPath $configPath
         Test-BackupScriptExecution -configPath $configPath
         Test-S3Upload -configPath $configPath
-    } else {
+    }
+    else {
         Skip-Test "All backup functionality tests" "No configuration file specified"
     }
     
@@ -679,8 +701,8 @@ function Invoke-BackupTests {
     
     if ($script:TestResults.FailedTests -gt 0) {
         Write-Host "Failed Tests:" -ForegroundColor Red
-        foreach ($error in $script:TestResults.Errors) {
-            Write-Host "  - $error" -ForegroundColor Red
+        foreach ($next_err in $script:TestResults.Errors) {
+            Write-Host "  - $next_err" -ForegroundColor Red
         }
         Write-Host ""
     }
@@ -690,10 +712,12 @@ function Invoke-BackupTests {
     if ($script:TestResults.FailedTests -eq 0) {
         Write-Host "🎉 All backup tests passed! Backup functionality is working correctly." -ForegroundColor Green
         return 0
-    } elseif ($successRate -ge 80) {
+    }
+    elseif ($successRate -ge 80) {
         Write-Host "⚠️  Most backup tests passed ($successRate%). Check failed tests above." -ForegroundColor Yellow
         return 1
-    } else {
+    }
+    else {
         Write-Host "❌ Many backup tests failed ($successRate%). Backup functionality may have issues." -ForegroundColor Red
         return 2
     }
@@ -703,7 +727,8 @@ function Invoke-BackupTests {
 try {
     $exitCode = Invoke-BackupTests
     exit $exitCode
-} catch {
+}
+catch {
     Write-Host "❌ Backup test execution failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 3
 }

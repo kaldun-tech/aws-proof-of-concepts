@@ -21,14 +21,14 @@
 #>
 
 param (
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [ValidateSet("dev", "test", "prod")]
     [string]$Environment = "dev",
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [string]$Region = "us-east-1",
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$Verbose
 )
 
@@ -37,12 +37,12 @@ $ErrorActionPreference = "Continue"
 
 # Test results tracking
 $script:TestResults = @{
-    TotalTests = 0
-    PassedTests = 0
-    FailedTests = 0
+    TotalTests   = 0
+    PassedTests  = 0
+    FailedTests  = 0
     SkippedTests = 0
-    Errors = @()
-    StartTime = Get-Date
+    Errors       = @()
+    StartTime    = Get-Date
 }
 
 # Function to write test output
@@ -60,7 +60,8 @@ function Write-TestResult {
         $script:TestResults.PassedTests++
         $status = "PASS"
         $color = "Green"
-    } else {
+    }
+    else {
         $script:TestResults.FailedTests++
         $status = "FAIL"
         $color = "Red"
@@ -115,15 +116,18 @@ function Test-CloudFormationStacks {
                 $found = $nestedStacks | Where-Object { $_.StackName -like "*$expectedStack*" }
                 if ($found) {
                     Write-TestResult "Nested stack exists: $expectedStack" ($found.StackStatus -like "*COMPLETE*") "Status: $($found.StackStatus)"
-                } else {
+                }
+                else {
                     Write-TestResult "Nested stack exists: $expectedStack" $false "Stack not found"
                 }
             }
-        } else {
+        }
+        else {
             Write-TestResult "Main CloudFormation stack exists" $false "Stack $mainStackName not found"
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "CloudFormation stacks accessible" $false $_.Exception.Message
     }
 }
@@ -144,7 +148,8 @@ function Test-S3Configuration {
             try {
                 aws s3api head-bucket --bucket $bucketName --region $Region 2>$null
                 Write-TestResult "Backup bucket accessible" ($LASTEXITCODE -eq 0) 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Backup bucket accessible" $false $_.Exception.Message
             }
             
@@ -153,7 +158,8 @@ function Test-S3Configuration {
                 $encryption = aws s3api get-bucket-encryption --bucket $bucketName --region $Region --output json 2>$null | ConvertFrom-Json
                 $hasEncryption = $encryption.ServerSideEncryptionConfiguration.Rules.Count -gt 0
                 Write-TestResult "Bucket encryption enabled" $hasEncryption
-            } catch {
+            }
+            catch {
                 Write-TestResult "Bucket encryption enabled" $false "Could not retrieve encryption config"
             }
             
@@ -162,7 +168,8 @@ function Test-S3Configuration {
                 $versioning = aws s3api get-bucket-versioning --bucket $bucketName --region $Region --output json 2>$null | ConvertFrom-Json
                 $versioningEnabled = $versioning.Status -eq "Enabled"
                 Write-TestResult "Bucket versioning enabled" $versioningEnabled "Status: $($versioning.Status)"
-            } catch {
+            }
+            catch {
                 Write-TestResult "Bucket versioning enabled" $false "Could not retrieve versioning config"
             }
             
@@ -175,9 +182,10 @@ function Test-S3Configuration {
                 if ($hasLifecycle) {
                     # Test for Deep Archive rule
                     $deepArchiveRule = $lifecycle.Rules | Where-Object { $_.Transitions.StorageClass -contains "DEEP_ARCHIVE" }
-                    Write-TestResult "Deep Archive lifecycle rule exists" ($deepArchiveRule -ne $null)
+                    Write-TestResult "Deep Archive lifecycle rule exists" ($null -ne $deepArchiveRule)
                 }
-            } catch {
+            }
+            catch {
                 Write-TestResult "Lifecycle policies configured" $false "Could not retrieve lifecycle config"
             }
             
@@ -185,19 +193,22 @@ function Test-S3Configuration {
             try {
                 $publicAccess = aws s3api get-public-access-block --bucket $bucketName --region $Region --output json 2>$null | ConvertFrom-Json
                 $fullyBlocked = $publicAccess.PublicAccessBlockConfiguration.BlockPublicAcls -and 
-                               $publicAccess.PublicAccessBlockConfiguration.BlockPublicPolicy -and
-                               $publicAccess.PublicAccessBlockConfiguration.IgnorePublicAcls -and
-                               $publicAccess.PublicAccessBlockConfiguration.RestrictPublicBuckets
+                $publicAccess.PublicAccessBlockConfiguration.BlockPublicPolicy -and
+                $publicAccess.PublicAccessBlockConfiguration.IgnorePublicAcls -and
+                $publicAccess.PublicAccessBlockConfiguration.RestrictPublicBuckets
                 Write-TestResult "Public access properly blocked" $fullyBlocked
-            } catch {
+            }
+            catch {
                 Write-TestResult "Public access properly blocked" $false "Could not retrieve public access config"
             }
             
-        } else {
+        }
+        else {
             Write-TestResult "Backup bucket name retrieved" $false "Could not get bucket name from stack"
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "S3 configuration tests" $false $_.Exception.Message
     }
 }
@@ -217,8 +228,9 @@ function Test-IAMConfiguration {
             # Test user exists
             try {
                 $user = aws iam get-user --user-name $userName --output json 2>$null | ConvertFrom-Json
-                Write-TestResult "Backup IAM user exists" ($user.User -ne $null) "ARN: $($user.User.Arn)"
-            } catch {
+                Write-TestResult "Backup IAM user exists" ($null -ne $user.User) "ARN: $($user.User.Arn)"
+            }
+            catch {
                 Write-TestResult "Backup IAM user exists" $false $_.Exception.Message
             }
             
@@ -231,9 +243,10 @@ function Test-IAMConfiguration {
                 if ($hasPolicies) {
                     # Check for disaster recovery policy
                     $drPolicy = $policies.AttachedPolicies | Where-Object { $_.PolicyName -like "*DisasterRecovery*" }
-                    Write-TestResult "Disaster recovery policy attached" ($drPolicy -ne $null)
+                    Write-TestResult "Disaster recovery policy attached" ($null -ne $drPolicy)
                 }
-            } catch {
+            }
+            catch {
                 Write-TestResult "IAM user has policies attached" $false "Could not retrieve user policies"
             }
             
@@ -248,15 +261,18 @@ function Test-IAMConfiguration {
                     $activeKeys = $keys.AccessKeyMetadata | Where-Object { $_.Status -eq "Active" }
                     Write-TestResult "IAM user has active access keys" ($activeKeys.Count -gt 0) "Active keys: $($activeKeys.Count)"
                 }
-            } catch {
+            }
+            catch {
                 Write-TestResult "IAM user has access keys" $false "Could not retrieve access keys"
             }
             
-        } else {
+        }
+        else {
             Write-TestResult "Backup IAM user name retrieved" $false "Could not get user name from stack"
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "IAM configuration tests" $false $_.Exception.Message
     }
 }
@@ -281,9 +297,10 @@ function Test-CloudWatchConfiguration {
                 
                 if ($exists) {
                     $retentionDays = $logGroup.logGroups[0].retentionInDays
-                    Write-TestResult "Log group has retention policy" ($retentionDays -ne $null) "Retention: $retentionDays days" -Details $logGroupName
+                    Write-TestResult "Log group has retention policy" ($null -ne $retentionDays) "Retention: $retentionDays days" -Details $logGroupName
                 }
-            } catch {
+            }
+            catch {
                 Write-TestResult "Log group exists: $logGroupName" $false $_.Exception.Message
             }
         }
@@ -292,7 +309,7 @@ function Test-CloudWatchConfiguration {
         try {
             $topics = aws sns list-topics --region $Region --output json 2>$null | ConvertFrom-Json
             $drTopic = $topics.Topics | Where-Object { $_.TopicArn -like "*disaster-recovery*" -and $_.TopicArn -like "*$Environment*" }
-            Write-TestResult "SNS notification topic exists" ($drTopic -ne $null) "Topic: $($drTopic.TopicArn)"
+            Write-TestResult "SNS notification topic exists" ($null -ne $drTopic) "Topic: $($drTopic.TopicArn)"
             
             if ($drTopic) {
                 # Test topic has subscriptions
@@ -300,7 +317,8 @@ function Test-CloudWatchConfiguration {
                 $hasSubscriptions = $subscriptions.Subscriptions.Count -gt 0
                 Write-TestResult "SNS topic has subscriptions" $hasSubscriptions "Subscriptions: $($subscriptions.Subscriptions.Count)"
             }
-        } catch {
+        }
+        catch {
             Write-TestResult "SNS notification topic exists" $false $_.Exception.Message
         }
         
@@ -317,11 +335,13 @@ function Test-CloudWatchConfiguration {
                 
                 Write-TestResult "CloudWatch alarms in OK state" ($alertAlarms.Count -eq 0) "OK: $($okAlarms.Count), ALARM: $($alertAlarms.Count)"
             }
-        } catch {
+        }
+        catch {
             Write-TestResult "CloudWatch alarms configured" $false $_.Exception.Message
         }
         
-    } catch {
+    }
+    catch {
         Write-TestResult "CloudWatch configuration tests" $false $_.Exception.Message
     }
 }
@@ -338,9 +358,10 @@ function Test-AWSCLIConfiguration {
         # Test AWS credentials configured
         try {
             $identity = aws sts get-caller-identity --output json 2>$null | ConvertFrom-Json
-            Write-TestResult "AWS credentials configured" ($identity.Account -ne $null) "Account: $($identity.Account)"
-            Write-TestResult "AWS credentials valid" ($identity.Arn -ne $null) "Identity: $($identity.Arn)" -Details $identity.UserId
-        } catch {
+            Write-TestResult "AWS credentials configured" ($null -ne $identity.Account) "Account: $($identity.Account)"
+            Write-TestResult "AWS credentials valid" ($null -ne $identity.Arn) "Identity: $($identity.Arn)" -Details $identity.UserId
+        }
+        catch {
             Write-TestResult "AWS credentials configured" $false $_.Exception.Message
         }
         
@@ -348,7 +369,8 @@ function Test-AWSCLIConfiguration {
         $configuredRegion = aws configure get region 2>$null
         Write-TestResult "AWS region configured" ($configuredRegion -eq $Region) "Expected: $Region, Configured: $configuredRegion"
         
-    } catch {
+    }
+    catch {
         Write-TestResult "AWS CLI configuration tests" $false $_.Exception.Message
     }
 }
@@ -366,7 +388,8 @@ function Test-PowerShellDependencies {
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         Write-TestResult "System.IO.Compression.FileSystem available" $true
-    } catch {
+    }
+    catch {
         Write-TestResult "System.IO.Compression.FileSystem available" $false $_.Exception.Message
     }
     
@@ -378,7 +401,8 @@ function Test-PowerShellDependencies {
         $canWrite = Test-Path $testFile
         Remove-Item $testFile -Force -ErrorAction SilentlyContinue
         Write-TestResult "Temp directory writable" $canWrite "Path: $tempDir"
-    } catch {
+    }
+    catch {
         Write-TestResult "Temp directory writable" $false $_.Exception.Message
     }
 }
@@ -400,11 +424,13 @@ function Test-NetworkConnectivity {
             $response = Invoke-WebRequest -Uri $endpoint.Url -Method Head -TimeoutSec 10 -UseBasicParsing 2>$null
             $reachable = $response.StatusCode -eq 200 -or $response.StatusCode -eq 403  # 403 is OK for most AWS endpoints
             Write-TestResult "$($endpoint.Name) endpoint reachable" $reachable "Status: $($response.StatusCode)" -Details $endpoint.Url
-        } catch {
+        }
+        catch {
             # Network timeouts are common and don't necessarily indicate a problem
             if ($_.Exception.Message -like "*timeout*" -or $_.Exception.Message -like "*timed out*") {
                 Skip-Test "$($endpoint.Name) endpoint reachable" "Network timeout (may be normal)"
-            } else {
+            }
+            else {
                 Write-TestResult "$($endpoint.Name) endpoint reachable" $false $_.Exception.Message
             }
         }
@@ -442,8 +468,8 @@ function Invoke-InfrastructureTests {
     
     if ($script:TestResults.FailedTests -gt 0) {
         Write-Host "Failed Tests:" -ForegroundColor Red
-        foreach ($error in $script:TestResults.Errors) {
-            Write-Host "  - $error" -ForegroundColor Red
+        foreach ($next_err in $script:TestResults.Errors) {
+            Write-Host "  - $next_err" -ForegroundColor Red
         }
         Write-Host ""
     }
@@ -453,10 +479,12 @@ function Invoke-InfrastructureTests {
     if ($script:TestResults.FailedTests -eq 0) {
         Write-Host "🎉 All tests passed! Infrastructure is properly configured." -ForegroundColor Green
         return 0
-    } elseif ($successRate -ge 80) {
+    }
+    elseif ($successRate -ge 80) {
         Write-Host "⚠️  Most tests passed ($successRate%). Check failed tests above." -ForegroundColor Yellow
         return 1
-    } else {
+    }
+    else {
         Write-Host "❌ Many tests failed ($successRate%). Infrastructure may have issues." -ForegroundColor Red
         return 2
     }
@@ -466,7 +494,8 @@ function Invoke-InfrastructureTests {
 try {
     $exitCode = Invoke-InfrastructureTests
     exit $exitCode
-} catch {
+}
+catch {
     Write-Host "❌ Test execution failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 3
 }

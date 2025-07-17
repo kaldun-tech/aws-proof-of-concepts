@@ -30,21 +30,21 @@
 #>
 
 param (
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [ValidateSet("dev", "test", "prod")]
     [string]$Environment = "dev",
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [ValidateSet("minimal", "standard", "comprehensive")]
     [string]$TestSize = "standard",
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$CleanupAfterTest,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$IncludeActualRestore,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$Verbose
 )
 
@@ -53,13 +53,13 @@ $ErrorActionPreference = "Continue"
 
 # Test results tracking
 $script:TestResults = @{
-    TotalTests = 0
-    PassedTests = 0
-    FailedTests = 0
+    TotalTests   = 0
+    PassedTests  = 0
+    FailedTests  = 0
     SkippedTests = 0
-    Errors = @()
-    StartTime = Get-Date
-    TestData = @{}
+    Errors       = @()
+    StartTime    = Get-Date
+    TestData     = @{}
 }
 
 # Function to write test output
@@ -77,7 +77,8 @@ function Write-TestResult {
         $script:TestResults.PassedTests++
         $status = "PASS"
         $color = "Green"
-    } else {
+    }
+    else {
         $script:TestResults.FailedTests++
         $status = "FAIL"
         $color = "Red"
@@ -128,7 +129,8 @@ function Invoke-TestScript {
                 if ($Parameters[$key]) {
                     $paramString += " -$key"
                 }
-            } else {
+            }
+            else {
                 $paramString += " -$key '$($Parameters[$key])'"
             }
         }
@@ -146,7 +148,8 @@ function Invoke-TestScript {
         Write-TestResult $TestName $success "Exit code: $LASTEXITCODE"
         return $success
         
-    } catch {
+    }
+    catch {
         Write-TestResult $TestName $false $_.Exception.Message
         return $false
     }
@@ -159,7 +162,7 @@ function Test-InfrastructurePhase {
     $infraScript = Join-Path $PSScriptRoot ".." "Test-Infrastructure.ps1"
     $parameters = @{
         Environment = $Environment
-        Verbose = $Verbose
+        Verbose     = $Verbose
     }
     
     $success = Invoke-TestScript -ScriptPath $infraScript -TestName "Infrastructure validation" -Parameters $parameters
@@ -177,9 +180,9 @@ function Test-BackupPhase {
     
     $backupScript = Join-Path $PSScriptRoot ".." "Test-Backup.ps1"
     $parameters = @{
-        CreateTestData = $true
+        CreateTestData  = $true
         CleanupTestData = $CleanupAfterTest
-        Verbose = $Verbose
+        Verbose         = $Verbose
     }
     
     # Add actual upload test for comprehensive testing
@@ -200,7 +203,8 @@ function Test-BackupPhase {
             if ($latestTestData) {
                 $script:TestResults.TestData.BackupDataPath = $latestTestData.FullName
             }
-        } catch {
+        }
+        catch {
             # Test data path extraction failed, but this is not critical
         }
     }
@@ -224,7 +228,7 @@ function Test-RestorePhase {
     $parameters = @{
         TestType = $testType
         MockData = !$IncludeActualRestore
-        Verbose = $Verbose
+        Verbose  = $Verbose
     }
     
     $success = Invoke-TestScript -ScriptPath $restoreScript -TestName "Restore functionality" -Parameters $parameters
@@ -253,7 +257,8 @@ function Test-IntegrationPhase {
                 $backupHelp = & $backupScript -? 2>&1 | Out-String
                 $backupHelpWorking = $backupHelp -like "*SYNOPSIS*" -or $backupHelp -like "*DESCRIPTION*"
                 Write-TestResult "Backup script help functionality" $backupHelpWorking
-            } catch {
+            }
+            catch {
                 Write-TestResult "Backup script help functionality" $false $_.Exception.Message
             }
             
@@ -261,7 +266,8 @@ function Test-IntegrationPhase {
                 $restoreHelp = & $restoreScript -Action list -? 2>&1 | Out-String
                 $restoreHelpWorking = $restoreHelp -like "*SYNOPSIS*" -or $restoreHelp -like "*list*"
                 Write-TestResult "Restore script help functionality" $restoreHelpWorking
-            } catch {
+            }
+            catch {
                 Write-TestResult "Restore script help functionality" $false $_.Exception.Message
             }
         }
@@ -272,7 +278,7 @@ function Test-IntegrationPhase {
             try {
                 $config = Get-Content $configFile | ConvertFrom-Json
                 $configValid = $config.PSObject.Properties.Name -contains "backupName" -and
-                              $config.PSObject.Properties.Name -contains "paths"
+                $config.PSObject.Properties.Name -contains "paths"
                 Write-TestResult "Configuration file format valid" $configValid
                 
                 # Test paths in configuration
@@ -291,10 +297,12 @@ function Test-IntegrationPhase {
                 
                 Write-TestResult "Configuration paths structure valid" ($validPaths -gt 0) "Valid: $validPaths / $totalPaths"
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Configuration file format valid" $false $_.Exception.Message
             }
-        } else {
+        }
+        else {
             Skip-Test "Configuration file validation" "Config file not found"
         }
         
@@ -303,7 +311,8 @@ function Test-IntegrationPhase {
             $logGroups = aws logs describe-log-groups --log-group-name-prefix "/aws/disaster-recovery" --output json 2>$null | ConvertFrom-Json
             $hasLogGroups = $logGroups.logGroups.Count -gt 0
             Write-TestResult "CloudWatch log groups accessible" $hasLogGroups "Groups: $($logGroups.logGroups.Count)"
-        } catch {
+        }
+        catch {
             Skip-Test "CloudWatch log groups accessible" "AWS CLI not available or not configured"
         }
         
@@ -313,13 +322,15 @@ function Test-IntegrationPhase {
             $drTopics = $topics.Topics | Where-Object { $_.TopicArn -like "*disaster-recovery*" }
             $hasTopics = $drTopics.Count -gt 0
             Write-TestResult "SNS notification topics accessible" $hasTopics "Topics: $($drTopics.Count)"
-        } catch {
+        }
+        catch {
             Skip-Test "SNS notification topics accessible" "AWS CLI not available or not configured"
         }
         
         return $true
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Integration testing" $false $_.Exception.Message
         return $false
     }
@@ -359,12 +370,12 @@ function Test-WorkflowPhase {
         
         # Step 2: Create workflow configuration
         $workflowConfig = @{
-            backupName = "WorkflowTest"
+            backupName  = "WorkflowTest"
             compression = @{ enabled = $true; level = 6; format = "zip" }
-            paths = @(
+            paths       = @(
                 @{
-                    name = "WorkflowTestData"
-                    source = $workflowTestPath
+                    name    = "WorkflowTestData"
+                    source  = $workflowTestPath
                     include = @("*.txt", "*.jpg", "*.csv")
                     exclude = @()
                 }
@@ -391,10 +402,12 @@ function Test-WorkflowPhase {
                     $backupOutput | ForEach-Object { Write-Host "        $_" -ForegroundColor Gray }
                 }
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Backup workflow dry run" $false $_.Exception.Message
             }
-        } else {
+        }
+        else {
             Skip-Test "Backup workflow dry run" "Backup script not found"
         }
         
@@ -408,10 +421,12 @@ function Test-WorkflowPhase {
                 
                 Write-TestResult "Restore workflow list" $restoreSuccess "Exit code: $LASTEXITCODE"
                 
-            } catch {
+            }
+            catch {
                 Write-TestResult "Restore workflow list" $false $_.Exception.Message
             }
-        } else {
+        }
+        else {
             Skip-Test "Restore workflow simulation" "Restore script not found"
         }
         
@@ -426,7 +441,8 @@ function Test-WorkflowPhase {
             $logCreated = Test-Path $logFile
             Write-TestResult "Workflow logging functionality" $logCreated "Log: $logFile"
             
-        } catch {
+        }
+        catch {
             Write-TestResult "Workflow logging functionality" $false $_.Exception.Message
         }
         
@@ -435,16 +451,19 @@ function Test-WorkflowPhase {
             try {
                 Remove-Item $workflowTestPath -Recurse -Force -ErrorAction SilentlyContinue
                 Write-TestResult "Workflow test data cleanup" $true "Removed: $workflowTestPath"
-            } catch {
+            }
+            catch {
                 Write-TestResult "Workflow test data cleanup" $false $_.Exception.Message
             }
-        } else {
+        }
+        else {
             Write-Host "Workflow test data preserved at: $workflowTestPath" -ForegroundColor Yellow
         }
         
         return $true
         
-    } catch {
+    }
+    catch {
         Write-TestResult "End-to-end workflow testing" $false $_.Exception.Message
         return $false
     }
@@ -459,22 +478,22 @@ function New-TestReport {
         $reportPath = Join-Path $env:TEMP "dr-test-report-$timestamp.json"
         
         $report = @{
-            testSession = @{
-                timestamp = $script:TestResults.StartTime.ToString("yyyy-MM-dd HH:mm:ss")
-                environment = $Environment
-                testSize = $TestSize
+            testSession     = @{
+                timestamp            = $script:TestResults.StartTime.ToString("yyyy-MM-dd HH:mm:ss")
+                environment          = $Environment
+                testSize             = $TestSize
                 includeActualRestore = $IncludeActualRestore
-                duration = ($script:TestResults.EndTime - $script:TestResults.StartTime).ToString("hh\:mm\:ss")
+                duration             = ($script:TestResults.EndTime - $script:TestResults.StartTime).ToString("hh\:mm\:ss")
             }
-            summary = @{
-                totalTests = $script:TestResults.TotalTests
-                passedTests = $script:TestResults.PassedTests
-                failedTests = $script:TestResults.FailedTests
+            summary         = @{
+                totalTests   = $script:TestResults.TotalTests
+                passedTests  = $script:TestResults.PassedTests
+                failedTests  = $script:TestResults.FailedTests
                 skippedTests = $script:TestResults.SkippedTests
-                successRate = if ($script:TestResults.TotalTests -gt 0) { [math]::Round(($script:TestResults.PassedTests / $script:TestResults.TotalTests) * 100, 1) } else { 0 }
+                successRate  = if ($script:TestResults.TotalTests -gt 0) { [math]::Round(($script:TestResults.PassedTests / $script:TestResults.TotalTests) * 100, 1) } else { 0 }
             }
-            errors = $script:TestResults.Errors
-            testData = $script:TestResults.TestData
+            errors          = $script:TestResults.Errors
+            testData        = $script:TestResults.TestData
             recommendations = @()
         }
         
@@ -497,7 +516,8 @@ function New-TestReport {
         
         return $reportPath
         
-    } catch {
+    }
+    catch {
         Write-TestResult "Test report generation" $false $_.Exception.Message
         return $null
     }
@@ -577,8 +597,8 @@ function Invoke-EndToEndTests {
     
     if ($script:TestResults.FailedTests -gt 0) {
         Write-Host "Failed Tests:" -ForegroundColor Red
-        foreach ($error in $script:TestResults.Errors) {
-            Write-Host "  - $error" -ForegroundColor Red
+        foreach ($next_err in $script:TestResults.Errors) {
+            Write-Host "  - $next_err" -ForegroundColor Red
         }
         Write-Host ""
     }
@@ -589,10 +609,12 @@ function Invoke-EndToEndTests {
     if ($script:TestResults.FailedTests -eq 0) {
         Write-Host "🎉 All end-to-end tests passed! Disaster recovery solution is working correctly." -ForegroundColor Green
         return 0
-    } elseif ($successRate -ge 75) {
+    }
+    elseif ($successRate -ge 75) {
         Write-Host "⚠️  Most tests passed ($successRate%). Review failed tests and consider re-running." -ForegroundColor Yellow
         return 1
-    } else {
+    }
+    else {
         Write-Host "❌ Many tests failed ($successRate%). Disaster recovery solution needs attention." -ForegroundColor Red
         return 2
     }
@@ -608,7 +630,8 @@ try {
     
     $exitCode = Invoke-EndToEndTests
     exit $exitCode
-} catch {
+}
+catch {
     Write-Host "❌ End-to-end test execution failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 3
 }

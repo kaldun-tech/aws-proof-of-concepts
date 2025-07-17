@@ -86,7 +86,7 @@ function Test-StackExists {
     )
     
     try {
-        $status = aws cloudformation describe-stacks --stack-name $stackName --query "Stacks[0].StackStatus" --output text --region $region 2>$null
+        aws cloudformation describe-stacks --stack-name $stackName --query "Stacks[0].StackStatus" --output text --region $region 2>$null
         return $LASTEXITCODE -eq 0
     }
     catch {
