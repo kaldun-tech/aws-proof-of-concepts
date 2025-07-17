@@ -29,16 +29,16 @@ To deploy the infrastructure, use the provided `deploy.ps1` script:
 
 ```powershell
 cd poc-3-reliable-multi-tier\infrastructure\scripts
-.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name
+.\deploy.ps1 -Environment dev -S3BucketName your-bucket-name
 
 # Deploy with specific component only
-.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Component vpc
+.\deploy.ps1 -Environment dev -S3BucketName your-bucket-name -Component vpc
 
 # Deploy with testing enabled
-.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -RunTests $true
+.\deploy.ps1 -Environment dev -S3BucketName your-bucket-name -RunTests $true
 
 # Deploy with specific AWS profile (useful for SSO)
-.\deploy.ps1 -Environment dev -EmailAddress your-email@example.com -S3BucketName your-bucket-name -Profile my-sso-profile
+.\deploy.ps1 -Environment dev -S3BucketName your-bucket-name -Profile my-sso-profile
 ```
 
 ### Deploy Parameters
@@ -46,7 +46,7 @@ cd poc-3-reliable-multi-tier\infrastructure\scripts
 | Parameter | Description | Required | Default | Options |
 |-----------|-------------|----------|---------|---------|
 | Environment | Deployment environment | Yes | - | dev, test, prod |
-| EmailAddress | Email address for notifications | Yes | - | - |
+| EmailAddress | Email address for notifications (currently unused) | No | "" | - |
 | S3BucketName | S3 bucket name for CloudFormation templates (created automatically if it doesn't exist) | Yes | - | - |
 | Region | AWS region to deploy to | No | us-east-1 | - |
 | StackNamePrefix | Prefix for CloudFormation stack names | No | WebApp1 | - |

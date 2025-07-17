@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Simplified deployment script for the Reliable Multi-Tier POC.
+    Deployment script for the Reliable Multi-Tier POC.
 
 .DESCRIPTION
     This script deploys the VPC and static web application CloudFormation stacks
@@ -11,7 +11,7 @@
     The deployment environment (dev, test, prod).
 
 .PARAMETER EmailAddress
-    Email address for notifications.
+    Email address for notifications (currently unused but kept for future expansion).
 
 .PARAMETER S3BucketName
     S3 bucket name for CloudFormation templates.
@@ -32,10 +32,10 @@
     The AWS CLI profile to use for authentication. Optional - uses default profile if not specified.
 
 .EXAMPLE
-    .\deploy-simple.ps1 -Environment dev -EmailAddress user@example.com -S3BucketName my-bucket
+    .\deploy.ps1 -Environment dev -S3BucketName my-bucket
     
 .EXAMPLE
-    .\deploy-simple.ps1 -Environment dev -EmailAddress user@example.com -S3BucketName my-bucket -Profile my-sso-profile
+    .\deploy.ps1 -Environment dev -S3BucketName my-bucket -Profile my-sso-profile
 #>
 
 param(
@@ -43,8 +43,8 @@ param(
     [ValidateSet("dev", "test", "prod")]
     [string]$Environment,
 
-    [Parameter(Mandatory=$true)]
-    [string]$EmailAddress,
+    [Parameter(Mandatory=$false)]
+    [string]$EmailAddress = "",
 
     [Parameter(Mandatory=$true)]
     [string]$S3BucketName,
@@ -148,7 +148,7 @@ function New-CloudFormationStack {
         }
     }
     catch {
-        Write-Error "Error deploying stack $stackName: $_"
+        Write-Error "Error deploying stack ${stackName}: $_"
         return $false
     }
 }
