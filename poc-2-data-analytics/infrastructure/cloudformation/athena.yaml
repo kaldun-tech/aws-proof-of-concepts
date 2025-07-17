@@ -49,30 +49,33 @@ Resources:
       Name: !Sub 'create-clickstream-table-${Environment}'
       Description: 'Query to create the clickstream data table'
       Database: default
-      QueryString: !Sub |
-        CREATE EXTERNAL TABLE IF NOT EXISTS my_ingested_data (
-          element_clicked STRING,
-          time_spent INT,
-          source_menu STRING,
-          created_at STRING
-        )
-        PARTITIONED BY (
-          datehour STRING
-        )
-        ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
-        WITH SERDEPROPERTIES (
-          'paths'='element_clicked, time_spent, source_menu, created_at'
-        )
-        LOCATION 's3://${S3BucketName}/'
-        TBLPROPERTIES (
-          'projection.enabled' = 'true',
-          'projection.datehour.type' = 'date',
-          'projection.datehour.format' = 'yyyy/MM/dd/HH',
-          'projection.datehour.range' = '2021/01/01/00,NOW',
-          'projection.datehour.interval' = '1',
-          'projection.datehour.interval.unit' = 'HOURS',
-          'storage.location.template' = 's3://${S3BucketName}/data/$${datehour}/'
-        )
+      QueryString: !Sub 
+        - |
+          CREATE EXTERNAL TABLE IF NOT EXISTS my_ingested_data (
+            element_clicked STRING,
+            time_spent INT,
+            source_menu STRING,
+            created_at STRING
+          )
+          PARTITIONED BY (
+            datehour STRING
+          )
+          ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+          WITH SERDEPROPERTIES (
+            'paths'='element_clicked, time_spent, source_menu, created_at'
+          )
+          LOCATION 's3://${BucketName}/'
+          TBLPROPERTIES (
+            'projection.enabled' = 'true',
+            'projection.datehour.type' = 'date',
+            'projection.datehour.format' = 'yyyy/MM/dd/HH',
+            'projection.datehour.range' = '2021/01/01/00,NOW',
+            'projection.datehour.interval' = '1',
+            'projection.datehour.interval.unit' = 'HOURS',
+            'storage.location.template' = 's3://${BucketName}/data/${datehour}/'
+          )
+        - BucketName: !Ref S3BucketName
+          datehour: '${datehour}'
       WorkGroup: !Ref AthenaWorkGroup
 
   # Athena Named Query to select data

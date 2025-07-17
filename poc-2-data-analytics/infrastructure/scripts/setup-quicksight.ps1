@@ -115,12 +115,6 @@ if (-not (Test-Path $sqlQueriesDir)) {
     New-Item -ItemType Directory -Path $sqlQueriesDir | Out-Null
 }
 
-# Read queries from existing SQL files
-$allDataQuery = Get-Content -Path ".\sql-queries\all-data.sql" -Raw
-$popularItemsQuery = Get-Content -Path ".\sql-queries\popular-items.sql" -Raw
-$sourceMenuQuery = Get-Content -Path ".\sql-queries\source-menu-analysis.sql" -Raw  
-$timeSeriesQuery = Get-Content -Path ".\sql-queries\time-series-analysis.sql" -Raw
-
 # Define query file paths
 $allDataQueryFile = Join-Path $sqlQueriesDir "all-data.sql"
 $popularItemsQueryFile = Join-Path $sqlQueriesDir "popular-items.sql"
