@@ -132,7 +132,7 @@ function Remove-CloudFormationStack {
         }
     }
     catch {
-        Write-Error "Error deleting CloudFormation stack $stackName: $_"
+        Write-Error "Error deleting CloudFormation stack ${stackName}: $_"
         return $false
     }
 }

@@ -25,6 +25,14 @@ Parameters:
     Description: VPC CIDR block for IPv4. Default of 10.0.0.0/16 is recommended for testing.
     Type: String
     Default: 10.0.0.0/16
+  VPCSubnetIPv4Size:
+    Description: Host bit mask length of each subnet, e.g. default of 8 will be a /24 subnet size.
+    Type: Number
+    Default: 8
+  VPCNumberOfIPv4Subnets:
+    Description: Number of equally sized IPv4 subnets that will be created within the VPC CIDR block. Default of 256 is recommended for testing.
+    Type: Number
+    Default: 256
   #ALB #1 Tier:
   ALB1SubnetsEnabled:
     Description: Create subnets and other resources for application load balancer (ALB) tier. False disables the ALB tier completely. 
@@ -1408,11 +1416,6 @@ Outputs:
     Value: !GetAtt VPC.CidrBlock
     Export:
       Name: !Sub '${AWS::StackName}-VPCIPv4CIDR'
-  AppVPCFlowLogsArn:
-    Description: ARN of VPC Flow Logs Group
-    Value: !GetAtt VPCFlowLogGroup.Arn
-    Export:
-      Name: !Sub '${AWS::StackName}-VPCFlowLogsArn'
   #ALB1:
   ALB1Subnet1:
     Condition: ALB1Enabled
@@ -1497,7 +1500,6 @@ Metadata:
           - VPCIPv4CidrBlock
           - VPCSubnetIPv4Size
           - VPCNumberOfIPv4Subnets
-          - VPCFlowLogRetention
       - 
         Label: 
           default: "Application Load Balancer Tier"
@@ -1529,8 +1531,6 @@ Metadata:
         default: Size of each IPv4 subnet in the VPC
       VPCNumberOfIPv4Subnets:
         default: Number of IPv4 subnets in VPC
-      VPCFlowLogRetention:
-        default: Days to retain VPC Flow Logs
       ALB1SubnetsEnabled:
         default: Application Load Balancer tier
       App1SubnetsInternetRoute:

@@ -161,19 +161,17 @@ function New-S3Bucket {
     
     Write-Host "Checking if S3 bucket $bucketName exists..."
     
-    try {
-        aws s3api head-bucket --bucket $bucketName --region $Region 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "S3 bucket $bucketName already exists."
-        }
-    }
-    catch {
+    aws s3api head-bucket --bucket $bucketName --region $Region 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "S3 bucket $bucketName already exists."
+    } else {
         Write-Host "Creating S3 bucket $bucketName..."
         aws s3 mb s3://$bucketName --region $Region
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to create S3 bucket $bucketName"
             exit 1
         }
+        Write-Host "S3 bucket $bucketName created successfully."
     }
 }
 
