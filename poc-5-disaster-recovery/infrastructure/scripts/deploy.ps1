@@ -92,6 +92,14 @@ param (
 # Set error action preference
 $ErrorActionPreference = "Stop"
 
+# Import common modules
+$modulePath = Join-Path $PSScriptRoot "common"
+if (Test-Path $modulePath) {
+    Import-Module (Join-Path $modulePath "CloudFormation-Utils.psm1") -Force
+    Import-Module (Join-Path $modulePath "S3-Utils.psm1") -Force
+    Write-Host "Loaded common utility modules" -ForegroundColor Green
+}
+
 # Set up AWS CLI profile parameter
 if ($Profile) {
     $env:AWS_PROFILE = $Profile
@@ -120,122 +128,131 @@ $region = $Region
 $stackNamePrefix = "disaster-recovery"
 $templateDir = Join-Path $PSScriptRoot ".." "cloudformation"
 
-# Function to check if S3 bucket exists for CloudFormation templates
-function Test-S3Bucket {
-    param (
-        [string]$bucketName
-    )
-
-    try {
-        Write-Host "Checking if S3 bucket $bucketName exists..."
-        aws s3api head-bucket --bucket $bucketName --region $region 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "S3 bucket $bucketName exists." -ForegroundColor Green
-            return $true
-        }
-    }
-    catch {
-        Write-Host "S3 bucket $bucketName does not exist." -ForegroundColor Yellow
-        return $false
-    }
-    return $false
+# Legacy function wrappers for backward compatibility (using new modules)
+function Test-S3BucketLegacy {
+    param ([string]$bucketName)
+    return Test-S3Bucket -BucketName $bucketName -Region $region
 }
 
-# Function to create S3 bucket for CloudFormation templates
-function New-S3Bucket {
-    param (
-        [string]$bucketName
-    )
-
-    try {
-        Write-Host "Creating S3 bucket $bucketName for CloudFormation templates..."
-        if ($region -eq "us-east-1") {
-            aws s3 mb s3://$bucketName --region $region
-        } else {
-            aws s3api create-bucket --bucket $bucketName --region $region --create-bucket-configuration LocationConstraint=$region
-        }
-        
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create S3 bucket"
-        }
-        
-        Write-Host "S3 bucket $bucketName created successfully." -ForegroundColor Green
-    }
-    catch {
-        Write-Error "Error creating S3 bucket: $_"
+function New-S3BucketLegacy {
+    param ([string]$bucketName)
+    $result = New-S3Bucket -BucketName $bucketName -Region $region
+    if (-not $result) {
         exit 1
     }
 }
 
-# Function to package CloudFormation templates
-function ConvertTo-CloudFormationPackage {
+function ConvertTo-CloudFormationPackageLegacy {
     param (
         [string]$templateFile,
         [string]$s3Bucket,
         [string]$outputFile
     )
-
-    try {
-        Write-Host "Packaging CloudFormation template $templateFile..."
-        aws cloudformation package `
-            --template-file $templateFile `
-            --s3-bucket $s3Bucket `
-            --output-template-file $outputFile `
-            --region $region
-        
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to package CloudFormation template"
-        }
-    }
-    catch {
-        Write-Error "Error packaging CloudFormation template: $_"
+    $result = ConvertTo-CloudFormationPackage -TemplateFile $templateFile -S3Bucket $s3Bucket -OutputFile $outputFile -Region $region
+    if (-not $result) {
         exit 1
     }
 }
 
-# Function to deploy CloudFormation stack
+# Function to deploy CloudFormation stack with enhanced error handling
 function New-CloudFormationStack {
     param (
         [string]$stackName,
         [string]$templateFile,
         [hashtable]$parameters,
-        [bool]$capabilities = $false
+        [bool]$capabilities = $false,
+        [int]$maxRetries = 3,
+        [int]$retryDelaySeconds = 30
     )
 
-    try {
-        Write-Host "Deploying CloudFormation stack $stackName..."
-        
-        $paramString = ""
-        foreach ($key in $parameters.Keys) {
-            $paramString += "$key=$($parameters[$key]) "
+    $retryCount = 0
+    $lastError = $null
+    
+    while ($retryCount -lt $maxRetries) {
+        try {
+            Write-Host "Deploying CloudFormation stack $stackName (attempt $($retryCount + 1)/$maxRetries)..."
+            
+            # Validate template file exists
+            if (-not (Test-Path $templateFile)) {
+                throw "Template file not found: $templateFile"
+            }
+            
+            # Validate parameters
+            foreach ($key in $parameters.Keys) {
+                if ($null -eq $parameters[$key] -or $parameters[$key] -eq "") {
+                    Write-Warning "Parameter '$key' is null or empty"
+                }
+            }
+            
+            $paramString = ""
+            foreach ($key in $parameters.Keys) {
+                $paramString += "$key=$($parameters[$key]) "
+            }
+            
+            $cmd = "aws cloudformation deploy " +
+                   "--template-file `"$templateFile`" " +
+                   "--stack-name $stackName " +
+                   "--region $region " +
+                   "--no-fail-on-empty-changeset "
+            
+            if ($paramString.Trim()) {
+                $cmd += "--parameter-overrides $($paramString.Trim()) "
+            }
+            
+            if ($capabilities) {
+                $cmd += "--capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND "
+            }
+            
+            Write-Host "Executing: $cmd"
+            $output = Invoke-Expression $cmd 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Stack $stackName deployed successfully." -ForegroundColor Green
+                return $true
+            } else {
+                $lastError = "CloudFormation deploy failed with exit code $LASTEXITCODE. Output: $output"
+                throw $lastError
+            }
         }
-        
-        $cmd = "aws cloudformation deploy " +
-               "--template-file $templateFile " +
-               "--stack-name $stackName " +
-               "--region $region "
-        
-        if ($paramString) {
-            $cmd += "--parameter-overrides $paramString "
+        catch {
+            $lastError = $_.Exception.Message
+            $retryCount++
+            
+            if ($retryCount -lt $maxRetries) {
+                Write-Warning "Deployment attempt $retryCount failed: $lastError"
+                Write-Host "Waiting $retryDelaySeconds seconds before retry..." -ForegroundColor Yellow
+                Start-Sleep -Seconds $retryDelaySeconds
+                
+                # Check if the stack is in a failed state that requires manual intervention
+                try {
+                    $stackStatus = aws cloudformation describe-stacks --stack-name $stackName --query "Stacks[0].StackStatus" --output text --region $region 2>$null
+                    if ($stackStatus -like "*ROLLBACK_FAILED*" -or $stackStatus -like "*DELETE_FAILED*") {
+                        Write-Error "Stack $stackName is in state $stackStatus which requires manual intervention. Cannot retry automatically."
+                        throw "Stack in non-recoverable state: $stackStatus"
+                    }
+                } catch {
+                    # Stack might not exist yet, which is fine for new deployments
+                }
+            } else {
+                Write-Error "All deployment attempts failed. Last error: $lastError"
+                
+                # Try to get detailed CloudFormation events for troubleshooting
+                try {
+                    Write-Host "Recent CloudFormation events for troubleshooting:" -ForegroundColor Yellow
+                    $events = aws cloudformation describe-stack-events --stack-name $stackName --query "StackEvents[0:10].{Time:Timestamp,Status:ResourceStatus,Reason:ResourceStatusReason,Resource:LogicalResourceId}" --output table --region $region 2>$null
+                    if ($events) {
+                        Write-Host $events
+                    }
+                } catch {
+                    Write-Host "Could not retrieve CloudFormation events"
+                }
+                
+                throw $lastError
+            }
         }
-        
-        if ($capabilities) {
-            $cmd += "--capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
-        }
-        
-        Write-Host "Executing: $cmd"
-        Invoke-Expression $cmd
-        
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to deploy CloudFormation stack"
-        }
-        
-        Write-Host "Stack $stackName deployed successfully." -ForegroundColor Green
     }
-    catch {
-        Write-Error "Error deploying CloudFormation stack: $_"
-        exit 1
-    }
+    
+    return $false
 }
 
 # Function to validate stack deployment success
@@ -406,15 +423,15 @@ try {
     # S3 bucket for CloudFormation templates
     $cfTemplatesBucket = "$BackupBucketName-cf-templates"
     
-    if (!(Test-S3Bucket -bucketName $cfTemplatesBucket)) {
-        New-S3Bucket -bucketName $cfTemplatesBucket
+    if (!(Test-S3BucketLegacy -bucketName $cfTemplatesBucket)) {
+        New-S3BucketLegacy -bucketName $cfTemplatesBucket
     }
 
     # Package main template
     $mainTemplateFile = Join-Path $templateDir "main.yaml"
     $packagedMainTemplate = Join-Path $templateDir "main-packaged.yaml"
     
-    ConvertTo-CloudFormationPackage -templateFile $mainTemplateFile -s3Bucket $cfTemplatesBucket -outputFile $packagedMainTemplate
+    ConvertTo-CloudFormationPackageLegacy -templateFile $mainTemplateFile -s3Bucket $cfTemplatesBucket -outputFile $packagedMainTemplate
 
     # Deploy components based on parameter
     $stackName = "$stackNamePrefix-main-$Environment"

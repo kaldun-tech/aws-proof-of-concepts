@@ -127,6 +127,135 @@ function Write-LogMessage {
     }
 }
 
+# Function to validate input parameters
+function Test-InputParameters {
+    param (
+        [string]$configPath,
+        [string]$action,
+        [string]$backupDate
+    )
+    
+    # Validate config file
+    if (-not $configPath) {
+        throw "ConfigFile parameter is required"
+    }
+    
+    if (-not (Test-Path $configPath)) {
+        throw "Configuration file not found: $configPath"
+    }
+    
+    # Validate config file is readable and has proper extension
+    $fileInfo = Get-Item $configPath
+    if ($fileInfo.Extension -notin @('.json', '.conf')) {
+        Write-LogMessage "Warning: Config file extension '$($fileInfo.Extension)' is not .json or .conf" "WARN"
+    }
+    
+    # Validate backup date format if provided
+    if ($backupDate) {
+        try {
+            $null = [DateTime]::ParseExact($backupDate, "yyyy-MM-dd", $null)
+        }
+        catch {
+            throw "BackupDate must be in YYYY-MM-DD format. Provided: $backupDate"
+        }
+    }
+    
+    # Validate action parameter
+    if ($action -notin @('backup', 'verify', 'list')) {
+        throw "Action must be one of: backup, verify, list. Provided: $action"
+    }
+    
+    Write-LogMessage "Input parameter validation passed" "INFO"
+}
+
+# Function to validate backup configuration structure
+function Test-BackupConfiguration {
+    param (
+        [PSCustomObject]$config
+    )
+    
+    # Required top-level properties
+    $requiredProperties = @('backupName', 'compression', 'paths')
+    foreach ($prop in $requiredProperties) {
+        if (-not $config.PSObject.Properties.Name.Contains($prop)) {
+            throw "Missing required configuration property: $prop"
+        }
+    }
+    
+    # Validate backup name
+    if (-not $config.backupName -or $config.backupName.Length -lt 1) {
+        throw "backupName must be a non-empty string"
+    }
+    
+    if ($config.backupName -match '[<>:"/\\|?*]') {
+        throw "backupName contains invalid characters. Avoid: < > : \" / \\ | ? *"
+    }
+    
+    # Validate compression settings
+    if ($config.compression) {
+        if ($config.compression.PSObject.Properties.Name.Contains('enabled') -and $config.compression.enabled -is [string]) {
+            # Convert string to boolean if needed
+            $config.compression.enabled = [bool]::Parse($config.compression.enabled)
+        }
+        
+        if ($config.compression.enabled) {
+            if (-not $config.compression.PSObject.Properties.Name.Contains('format')) {
+                throw "Compression format is required when compression is enabled"
+            }
+            
+            if ($config.compression.format -notin @('zip', '7z', 'tar.gz')) {
+                throw "Compression format must be one of: zip, 7z, tar.gz. Found: $($config.compression.format)"
+            }
+            
+            if ($config.compression.PSObject.Properties.Name.Contains('level')) {
+                $level = $config.compression.level
+                if ($level -lt 0 -or $level -gt 9) {
+                    throw "Compression level must be between 0 and 9. Found: $level"
+                }
+            }
+        }
+    }
+    
+    # Validate paths configuration
+    if (-not $config.paths -or $config.paths.Count -eq 0) {
+        throw "At least one backup path must be configured"
+    }
+    
+    foreach ($pathConfig in $config.paths) {
+        # Required path properties
+        $requiredPathProps = @('name', 'source', 'include')
+        foreach ($prop in $requiredPathProps) {
+            if (-not $pathConfig.PSObject.Properties.Name.Contains($prop)) {
+                throw "Missing required path property '$prop' in path configuration"
+            }
+        }
+        
+        # Validate path name
+        if (-not $pathConfig.name -or $pathConfig.name.Length -lt 1) {
+            throw "Path name must be a non-empty string"
+        }
+        
+        # Validate source path exists
+        if (-not (Test-Path $pathConfig.source)) {
+            Write-LogMessage "Warning: Source path does not exist: $($pathConfig.source)" "WARN"
+        }
+        
+        # Validate include patterns
+        if (-not $pathConfig.include -or $pathConfig.include.Count -eq 0) {
+            throw "At least one include pattern must be specified for path '$($pathConfig.name)'"
+        }
+        
+        # Validate pattern syntax
+        foreach ($pattern in $pathConfig.include) {
+            if (-not $pattern -or $pattern.Length -eq 0) {
+                throw "Include patterns cannot be empty for path '$($pathConfig.name)'"
+            }
+        }
+    }
+    
+    Write-LogMessage "Configuration structure validation passed" "INFO"
+}
+
 # Function to load backup configuration
 function Get-BackupConfiguration {
     param (
@@ -134,12 +263,17 @@ function Get-BackupConfiguration {
     )
     
     try {
-        if (!(Test-Path $configPath)) {
-            throw "Configuration file not found: $configPath"
+        Test-InputParameters -configPath $configPath -action $Action -backupDate $BackupDate
+        
+        $configContent = Get-Content $configPath -Raw
+        if (-not $configContent.Trim()) {
+            throw "Configuration file is empty: $configPath"
         }
         
-        $config = Get-Content $configPath | ConvertFrom-Json
-        Write-LogMessage "Loaded configuration from $configPath" "INFO"
+        $config = $configContent | ConvertFrom-Json
+        Test-BackupConfiguration -config $config
+        
+        Write-LogMessage "Loaded and validated configuration from $configPath" "INFO"
         return $config
     }
     catch {

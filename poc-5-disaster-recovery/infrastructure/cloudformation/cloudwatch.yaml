@@ -46,22 +46,147 @@ Resources:
       Protocol: email
       Endpoint: !Ref UserEmail
 
-  # CloudWatch Alarm for backup failures
+  # CloudWatch Log Group for backup operations
+  BackupOperationsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/disaster-recovery/backup-operations-${Environment}'
+      RetentionInDays: 90
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: BackupOperations
+
+  # CloudWatch Log Group for restore operations
+  RestoreOperationsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/disaster-recovery/restore-operations-${Environment}'
+      RetentionInDays: 90
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: RestoreOperations
+
+  # Custom metric filter for backup success
+  BackupSuccessMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref BackupOperationsLogGroup
+      FilterPattern: '[timestamp, level="SUCCESS", message="Backup completed successfully"]'
+      MetricTransformations:
+        - MetricNamespace: 'DisasterRecovery/Backup'
+          MetricName: 'SuccessfulBackups'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  # Custom metric filter for backup failures
+  BackupFailureMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref BackupOperationsLogGroup
+      FilterPattern: '[timestamp, level="ERROR", ...]'
+      MetricTransformations:
+        - MetricNamespace: 'DisasterRecovery/Backup'
+          MetricName: 'FailedBackups'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  # Custom metric filter for backup size
+  BackupSizeMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref BackupOperationsLogGroup
+      FilterPattern: '[timestamp, level="INFO", message="Backup size:", size_bytes]'
+      MetricTransformations:
+        - MetricNamespace: 'DisasterRecovery/Backup'
+          MetricName: 'BackupSizeBytes'
+          MetricValue: '$size_bytes'
+          DefaultValue: 0
+
+  # Custom metric filter for backup duration
+  BackupDurationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref BackupOperationsLogGroup
+      FilterPattern: '[timestamp, level="INFO", message="Backup duration:", duration_seconds]'
+      MetricTransformations:
+        - MetricNamespace: 'DisasterRecovery/Backup'
+          MetricName: 'BackupDurationSeconds'
+          MetricValue: '$duration_seconds'
+          DefaultValue: 0
+
+  # CloudWatch Alarm for backup failures (updated to use custom metrics)
   BackupFailureAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub 'DisasterRecovery-${Environment}-BackupFailures'
       AlarmDescription: 'Alerts when backup operations fail'
-      MetricName: 4XXError
-      Namespace: AWS/S3
+      MetricName: 'FailedBackups'
+      Namespace: 'DisasterRecovery/Backup'
       Statistic: Sum
       Period: 3600  # 1 hour
       EvaluationPeriods: 1
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref BackupNotificationTopic
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for missing backups (no successful backups in 48 hours)
+  MissingBackupAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'DisasterRecovery-${Environment}-MissingBackups'
+      AlarmDescription: 'Alerts when no successful backups occur for 48 hours'
+      MetricName: 'SuccessfulBackups'
+      Namespace: 'DisasterRecovery/Backup'
+      Statistic: Sum
+      Period: 86400  # 24 hours
+      EvaluationPeriods: 2  # 2 periods = 48 hours
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref BackupNotificationTopic
+      TreatMissingData: breaching
+
+  # CloudWatch Alarm for high backup costs
+  HighCostAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'DisasterRecovery-${Environment}-HighCosts'
+      AlarmDescription: !Sub 'Alerts when monthly costs exceed $${CostThresholdUSD}'
+      MetricName: 'EstimatedCharges'
+      Namespace: 'AWS/Billing'
+      Statistic: Maximum
+      Period: 86400  # 1 day
+      EvaluationPeriods: 1
+      Threshold: !Ref CostThresholdUSD
+      ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
-        - Name: BucketName
-          Value: !Ref BackupBucketName
+        - Name: Currency
+          Value: USD
+        - Name: ServiceName
+          Value: AmazonS3
+      AlarmActions:
+        - !Ref BackupNotificationTopic
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for long backup duration
+  LongBackupDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'DisasterRecovery-${Environment}-LongBackupDuration'
+      AlarmDescription: 'Alerts when backup takes longer than 2 hours'
+      MetricName: 'BackupDurationSeconds'
+      Namespace: 'DisasterRecovery/Backup'
+      Statistic: Maximum
+      Period: 3600  # 1 hour
+      EvaluationPeriods: 1
+      Threshold: 7200  # 2 hours in seconds
+      ComparisonOperator: GreaterThanOrEqualToThreshold
       AlarmActions:
         - !Ref BackupNotificationTopic
       TreatMissingData: notBreaching
@@ -147,14 +272,58 @@ Resources:
               "height": 6,
               "properties": {
                 "metrics": [
-                  [ "AWS/S3", "4xxErrors", "BucketName", "${BackupBucketName}" ],
-                  [ ".", "5xxErrors", ".", "." ]
+                  [ "DisasterRecovery/Backup", "SuccessfulBackups" ],
+                  [ ".", "FailedBackups" ]
                 ],
                 "view": "timeSeries",
                 "stacked": false,
                 "region": "${AWS::Region}",
-                "title": "S3 Errors",
+                "title": "Backup Success/Failure Rate",
                 "period": 3600,
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "DisasterRecovery/Backup", "BackupSizeBytes" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Backup Size Over Time",
+                "period": 86400,
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "DisasterRecovery/Backup", "BackupDurationSeconds" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Backup Duration",
+                "period": 86400,
                 "yAxis": {
                   "left": {
                     "min": 0
@@ -165,11 +334,11 @@ Resources:
             {
               "type": "log",
               "x": 0,
-              "y": 12,
+              "y": 18,
               "width": 24,
               "height": 6,
               "properties": {
-                "query": "SOURCE '/aws/s3/disaster-recovery-${Environment}'\n| fields @timestamp, eventName, sourceIPAddress, userIdentity.type\n| filter eventName like /Put/\n| sort @timestamp desc\n| limit 20",
+                "query": "SOURCE '/aws/disaster-recovery/backup-operations-${Environment}'\n| fields @timestamp, level, message\n| filter level = \"SUCCESS\" or level = \"ERROR\"\n| sort @timestamp desc\n| limit 20",
                 "region": "${AWS::Region}",
                 "title": "Recent Backup Operations",
                 "view": "table"

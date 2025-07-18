@@ -35,6 +35,28 @@ Parameters:
     Description: Monthly cost threshold for alerts (USD)
     MinValue: 1
     MaxValue: 1000
+  
+  EnableCrossRegionReplication:
+    Type: String
+    Default: 'false'
+    Description: Enable cross-region replication for disaster recovery
+    AllowedValues:
+      - 'true'
+      - 'false'
+  
+  ReplicationRegion:
+    Type: String
+    Default: 'us-west-2'
+    Description: Target region for cross-region replication (if enabled)
+    AllowedValues:
+      - us-east-1
+      - us-east-2
+      - us-west-1
+      - us-west-2
+      - eu-west-1
+      - eu-central-1
+      - ap-southeast-1
+      - ap-northeast-1
 
 Resources:
   # IAM Stack - Deploy first to create user and roles
@@ -59,6 +81,8 @@ Resources:
         BackupBucketName: !Ref BackupBucketName
         RetentionYears: !Ref RetentionYears
         BackupUserArn: !GetAtt IAMStack.Outputs.BackupUserArn
+        EnableCrossRegionReplication: !Ref EnableCrossRegionReplication
+        ReplicationRegion: !Ref ReplicationRegion
       TimeoutInMinutes: 15
 
   # CloudWatch Stack - Deploy last for monitoring

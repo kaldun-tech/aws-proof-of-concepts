@@ -53,6 +53,14 @@ param (
 # Set error action preference
 $ErrorActionPreference = "Stop"
 
+# Import common modules
+$modulePath = Join-Path $PSScriptRoot "common"
+if (Test-Path $modulePath) {
+    Import-Module (Join-Path $modulePath "CloudFormation-Utils.psm1") -Force
+    Import-Module (Join-Path $modulePath "S3-Utils.psm1") -Force
+    Write-Host "Loaded common utility modules" -ForegroundColor Green
+}
+
 # Set up AWS CLI profile parameter
 if ($Profile) {
     $env:AWS_PROFILE = $Profile
