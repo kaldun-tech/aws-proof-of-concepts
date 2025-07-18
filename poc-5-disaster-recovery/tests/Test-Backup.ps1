@@ -546,7 +546,10 @@ function Test-S3Upload {
         # Get bucket name
         $bucketName = $env:BACKUP_BUCKET_NAME
         if (!$bucketName) {
-            $bucketName = aws cloudformation describe-stacks --stack-name "disaster-recovery-main-dev" --query "Stacks[0].Outputs[?OutputKey=='BackupBucketName'].OutputValue" --output text 2>$null
+            # Use environment-aware stack name (default to dev for tests)
+            $testEnvironment = $env:DR_ENVIRONMENT ?? "dev"
+            $stackName = "disaster-recovery-main-$testEnvironment"
+            $bucketName = aws cloudformation describe-stacks --stack-name "$stackName" --query "Stacks[0].Outputs[?OutputKey=='BackupBucketName'].OutputValue" --output text 2>$null
         }
         
         if (!$bucketName) {

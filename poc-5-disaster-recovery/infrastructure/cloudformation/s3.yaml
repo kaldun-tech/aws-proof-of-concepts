@@ -129,7 +129,7 @@ Resources:
               - 's3:ListMultipartUploadParts'
             Resource: !Sub '${DisasterRecoveryBucket.Arn}/*'
           
-          # Deny public access
+          # Deny public access but allow account owner and CloudFormation
           - Sid: 'DenyPublicAccess'
             Effect: 'Deny'
             Principal: '*'
@@ -138,8 +138,16 @@ Resources:
               - !Sub '${DisasterRecoveryBucket.Arn}'
               - !Sub '${DisasterRecoveryBucket.Arn}/*'
             Condition:
+              Bool:
+                'aws:PrincipalIsAWSService': 'false'
               StringNotEquals:
-                'aws:PrincipalArn': !Ref BackupUserArn
+                'aws:userid': 
+                  - !Sub '${AWS::AccountId}'  # Account owner
+                  - !Select [0, !Split [':', !Ref BackupUserArn]]  # Backup user
+              StringNotLike:
+                'aws:userid': 
+                  - 'AIDACKCEVSQ6C2EXAMPLE:*'  # Allow IAM users from this account
+                  - !Sub '${AWS::AccountId}:*'  # Allow all principals from account
 
   # CloudWatch Log Group for S3 events
   S3EventLogGroup:

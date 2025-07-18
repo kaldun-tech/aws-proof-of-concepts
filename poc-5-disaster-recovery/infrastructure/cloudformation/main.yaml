@@ -95,9 +95,9 @@ Outputs:
     Description: Access Key ID for the backup user
     Value: !GetAtt IAMStack.Outputs.AccessKeyId
   
-  SecretAccessKey:
-    Description: Secret Access Key for the backup user (store securely)
-    Value: !GetAtt IAMStack.Outputs.SecretAccessKey
+  # SecretAccessKey removed for security - retrieve directly from IAM if needed
+  # Use: aws iam list-access-keys --user-name <username> to get key ID
+  # Then: aws configure set aws_secret_access_key <secret> --profile backup-user
   
   # Monitoring Resources
   NotificationTopicArn:

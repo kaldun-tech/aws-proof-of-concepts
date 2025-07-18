@@ -144,7 +144,7 @@ function Clear-S3Bucket {
         Write-Host "S3 bucket $bucketName emptied successfully." -ForegroundColor Green
     }
     catch {
-        Write-Warning "Error emptying S3 bucket $bucketName: $_"
+        Write-Warning "Error emptying S3 bucket ${bucketName}: $_"
     }
 }
 
@@ -175,7 +175,7 @@ function Remove-CloudFormationStack {
         }
     }
     catch {
-        Write-Error "Error deleting stack $stackName: $_"
+        Write-Error "Error deleting stack ${stackName}: $_"
         return $false
     }
 }

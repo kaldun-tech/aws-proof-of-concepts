@@ -67,11 +67,35 @@ param (
     [int]$Days = 1,
 
     [Parameter(Mandatory=$false)]
-    [switch]$Verbose
+    [switch]$Verbose,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("dev", "test", "prod")]
+    [string]$Environment = $null
 )
 
 # Set error action preference
 $ErrorActionPreference = "Stop"
+
+# Function to determine environment and stack name
+function Get-EnvironmentStackName {
+    # Priority: Parameter > Environment Variable > Default
+    $env = $Environment
+    if (-not $env) {
+        $env = $env:DR_ENVIRONMENT
+    }
+    if (-not $env) {
+        $env = "dev"
+        Write-LogMessage "No environment specified, defaulting to 'dev'. Use -Environment parameter or set DR_ENVIRONMENT variable." "WARNING"
+    }
+    
+    $stackName = "disaster-recovery-main-$env"
+    Write-LogMessage "Using environment: $env, stack: $stackName" "INFO"
+    return @{
+        Environment = $env
+        StackName = $stackName
+    }
+}
 
 # Global variables
 $script:LogFile = ""
@@ -129,7 +153,8 @@ function Get-BackupBucketName {
         $bucketName = $env:BACKUP_BUCKET_NAME
         if (!$bucketName) {
             # Try to get from CloudFormation stack output
-            $bucketName = aws cloudformation describe-stacks --stack-name "disaster-recovery-main-dev" --query "Stacks[0].Outputs[?OutputKey=='BackupBucketName'].OutputValue" --output text 2>$null
+            $stackInfo = Get-EnvironmentStackName
+            $bucketName = aws cloudformation describe-stacks --stack-name "$($stackInfo.StackName)" --query "Stacks[0].Outputs[?OutputKey=='BackupBucketName'].OutputValue" --output text 2>$null
         }
         
         if (!$bucketName) {
