@@ -47,7 +47,7 @@ Resources:
     DependsOn:
     - IAMStack
     Properties:
-      TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/3dd2c65d2886b1298daba0218cc8070a.template
+      TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/c452aa38b81196c305c15442332261ce.template
       Parameters:
         Environment:
           Ref: Environment

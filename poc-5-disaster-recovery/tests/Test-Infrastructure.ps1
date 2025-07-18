@@ -26,10 +26,7 @@ param (
     [string]$Environment = "dev",
 
     [Parameter(Mandatory = $false)]
-    [string]$Region = "us-east-1",
-
-    [Parameter(Mandatory = $false)]
-    [switch]$Verbose
+    [string]$Region = "us-east-1"
 )
 
 # Set error action preference
@@ -75,7 +72,7 @@ function Write-TestResult {
     
     Write-Host $output -ForegroundColor $color
     
-    if ($Details -and $Verbose) {
+    if ($Details -and ($VerbosePreference -eq 'Continue')) {
         Write-Host "        $Details" -ForegroundColor Gray
     }
 }

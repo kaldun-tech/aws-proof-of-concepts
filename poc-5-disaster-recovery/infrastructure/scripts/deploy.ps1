@@ -446,9 +446,10 @@ try {
             Write-Host "Dashboard URL: $dashboardURL"
             Write-Host ""
             Write-Host "=== AWS CREDENTIALS ===" -ForegroundColor Yellow
-            Write-Host "IMPORTANT: Store these credentials securely!"
-            Write-Host "Access Key ID: $accessKeyId"
-            Write-Host "Secret Access Key: $secretAccessKey"
+            Write-Host "IMPORTANT: AWS credentials have been created for backup operations."
+            Write-Host "For security reasons, credentials are not displayed in console output."
+            Write-Host "To retrieve credentials securely, use:"
+            Write-Host "  aws cloudformation describe-stacks --stack-name $stackName --query 'Stacks[0].Outputs'"
             Write-Host ""
             Write-Host "=== NEXT STEPS ===" -ForegroundColor Cyan
             Write-Host "1. Configure AWS CLI profile:"

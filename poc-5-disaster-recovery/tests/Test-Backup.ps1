@@ -40,10 +40,7 @@ param (
     [switch]$CleanupTestData,
 
     [Parameter(Mandatory = $false)]
-    [switch]$TestUpload,
-
-    [Parameter(Mandatory = $false)]
-    [switch]$Verbose
+    [switch]$TestUpload
 )
 
 # Set error action preference
@@ -90,7 +87,7 @@ function Write-TestResult {
     
     Write-Host $output -ForegroundColor $color
     
-    if ($Details -and $Verbose) {
+    if ($Details -and ($VerbosePreference -eq 'Continue')) {
         Write-Host "        $Details" -ForegroundColor Gray
     }
 }
@@ -514,7 +511,7 @@ function Test-BackupScriptExecution {
                 
                 Write-TestResult "Backup script dry run execution" $testSuccessful "Output patterns found: $hasProcessingOutput"
                 
-                if ($Verbose -and $testOutput) {
+                if (($VerbosePreference -eq 'Continue') -and $testOutput) {
                     Write-Host "        Script output:" -ForegroundColor Gray
                     $testOutput | ForEach-Object { Write-Host "        $_" -ForegroundColor Gray }
                 }
@@ -589,13 +586,13 @@ function Test-S3Upload {
                 
                 Write-TestResult "Backup files uploaded to S3" $hasBackupFiles "Found files in S3"
                 
-                if ($hasBackupFiles -and $Verbose) {
+                if ($hasBackupFiles -and ($VerbosePreference -eq 'Continue')) {
                     Write-Host "        S3 contents:" -ForegroundColor Gray
                     $listOutput | ForEach-Object { Write-Host "        $_" -ForegroundColor Gray }
                 }
             }
             
-            if ($Verbose -and $uploadOutput) {
+            if (($VerbosePreference -eq 'Continue') -and $uploadOutput) {
                 Write-Host "        Upload output:" -ForegroundColor Gray
                 $uploadOutput | ForEach-Object { Write-Host "        $_" -ForegroundColor Gray }
             }

@@ -65,8 +65,7 @@ Resources:
           # Backup files lifecycle
           - Id: 'BackupFilesLifecycle'
             Status: Enabled
-            Filter:
-              Prefix: 'backups/'
+            Prefix: 'backups/'
             Transitions:
               # Immediate transition to Deep Archive for cost savings
               - TransitionInDays: 1
