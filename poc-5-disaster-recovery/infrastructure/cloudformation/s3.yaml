@@ -28,6 +28,20 @@ Parameters:
     Type: String
     Description: ARN of the IAM user for backup operations
 
+Mappings:
+  RetentionMapping:
+    Days:
+      "1": 365
+      "2": 730
+      "3": 1095
+      "4": 1460
+      "5": 1825
+      "6": 2190
+      "7": 2555
+      "8": 2920
+      "9": 3285
+      "10": 3650
+
 Resources:
   # S3 Bucket for disaster recovery backups
   DisasterRecoveryBucket:
@@ -55,13 +69,13 @@ Resources:
               Prefix: 'backups/'
             Transitions:
               # Immediate transition to Deep Archive for cost savings
-              - TransitionInDays: 0
+              - TransitionInDays: 1
                 StorageClass: DEEP_ARCHIVE
-            ExpirationInDays: !Ref RetentionYears
+            ExpirationInDays: !FindInMap [RetentionMapping, Days, !Ref RetentionYears]
             NoncurrentVersionTransitions:
-              - TransitionInDays: 0
+              - TransitionInDays: 1
                 StorageClass: DEEP_ARCHIVE
-            NoncurrentVersionExpirationInDays: !Ref RetentionYears
+            NoncurrentVersionExpirationInDays: !FindInMap [RetentionMapping, Days, !Ref RetentionYears]
           
           
           # Cleanup incomplete multipart uploads

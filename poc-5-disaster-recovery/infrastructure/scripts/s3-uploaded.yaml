@@ -1,0 +1,176 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Disaster Recovery POC - S3 Storage Resources
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, test, prod)
+    AllowedValues:
+    - dev
+    - test
+    - prod
+  BackupBucketName:
+    Type: String
+    Description: Name of the S3 bucket for backups (must be globally unique)
+    AllowedPattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+    ConstraintDescription: Bucket name must be lowercase, contain only letters, numbers,
+      and hyphens
+  RetentionYears:
+    Type: Number
+    Default: 7
+    Description: Number of years to retain backups
+    MinValue: 1
+    MaxValue: 10
+  BackupUserArn:
+    Type: String
+    Description: ARN of the IAM user for backup operations
+Mappings:
+  RetentionMapping:
+    Days:
+      '1': 365
+      '2': 730
+      '3': 1095
+      '4': 1460
+      '5': 1825
+      '6': 2190
+      '7': 2555
+      '8': 2920
+      '9': 3285
+      '10': 3650
+Resources:
+  DisasterRecoveryBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Ref: BackupBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+          BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+        - Id: BackupFilesLifecycle
+          Status: Enabled
+          Filter:
+            Prefix: backups/
+          Transitions:
+          - TransitionInDays: 0
+            StorageClass: DEEP_ARCHIVE
+          ExpirationInDays:
+            Fn::FindInMap:
+            - RetentionMapping
+            - Days
+            - Ref: RetentionYears
+          NoncurrentVersionTransitions:
+          - TransitionInDays: 0
+            StorageClass: DEEP_ARCHIVE
+          NoncurrentVersionExpirationInDays:
+            Fn::FindInMap:
+            - RetentionMapping
+            - Days
+            - Ref: RetentionYears
+        - Id: IncompleteMultipartUploads
+          Status: Enabled
+          AbortIncompleteMultipartUpload:
+            DaysAfterInitiation: 1
+      Tags:
+      - Key: Environment
+        Value:
+          Ref: Environment
+      - Key: Purpose
+        Value: DisasterRecoveryBackup
+      - Key: CostCenter
+        Value: PersonalBackup
+  DisasterRecoveryBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: DisasterRecoveryBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: BackupUserAccess
+          Effect: Allow
+          Principal:
+            AWS:
+              Ref: BackupUserArn
+          Action:
+          - s3:ListBucket
+          - s3:GetBucketLocation
+          - s3:GetBucketVersioning
+          - s3:ListBucketVersions
+          - s3:ListBucketMultipartUploads
+          Resource:
+            Fn::Sub: ${DisasterRecoveryBucket.Arn}
+        - Sid: BackupUserObjectAccess
+          Effect: Allow
+          Principal:
+            AWS:
+              Ref: BackupUserArn
+          Action:
+          - s3:GetObject
+          - s3:GetObjectVersion
+          - s3:PutObject
+          - s3:PutObjectAcl
+          - s3:DeleteObject
+          - s3:DeleteObjectVersion
+          - s3:RestoreObject
+          - s3:AbortMultipartUpload
+          - s3:ListMultipartUploadParts
+          Resource:
+            Fn::Sub: ${DisasterRecoveryBucket.Arn}/*
+        - Sid: DenyPublicAccess
+          Effect: Deny
+          Principal: '*'
+          Action: s3:*
+          Resource:
+          - Fn::Sub: ${DisasterRecoveryBucket.Arn}
+          - Fn::Sub: ${DisasterRecoveryBucket.Arn}/*
+          Condition:
+            StringNotEquals:
+              aws:PrincipalArn:
+                Ref: BackupUserArn
+  S3EventLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/s3/disaster-recovery-${Environment}
+      RetentionInDays: 90
+      Tags:
+      - Key: Environment
+        Value:
+          Ref: Environment
+Outputs:
+  BucketName:
+    Description: Name of the disaster recovery S3 bucket
+    Value:
+      Ref: DisasterRecoveryBucket
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BucketName
+  BucketArn:
+    Description: ARN of the disaster recovery S3 bucket
+    Value:
+      Fn::GetAtt:
+      - DisasterRecoveryBucket
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BucketArn
+  BucketDomainName:
+    Description: Domain name of the disaster recovery S3 bucket
+    Value:
+      Fn::GetAtt:
+      - DisasterRecoveryBucket
+      - DomainName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BucketDomainName

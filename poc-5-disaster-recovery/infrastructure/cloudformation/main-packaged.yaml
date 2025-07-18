@@ -44,8 +44,10 @@ Resources:
       TimeoutInMinutes: 10
   S3Stack:
     Type: AWS::CloudFormation::Stack
+    DependsOn:
+    - IAMStack
     Properties:
-      TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/e4c017ccecf00a0b4add1e3c492d9db5.template
+      TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/3dd2c65d2886b1298daba0218cc8070a.template
       Parameters:
         Environment:
           Ref: Environment
@@ -58,10 +60,11 @@ Resources:
           - IAMStack
           - Outputs.BackupUserArn
       TimeoutInMinutes: 15
-      DependsOn:
-      - IAMStack
   CloudWatchStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn:
+    - S3Stack
+    - IAMStack
     Properties:
       TemplateURL: https://s3.us-east-1.amazonaws.com/kaldun-backup-test-cf-templates/1dea21fd2812f5a9a6492aa2e3bb0e29.template
       Parameters:
@@ -74,9 +77,6 @@ Resources:
         CostThresholdUSD:
           Ref: CostThresholdUSD
       TimeoutInMinutes: 10
-      DependsOn:
-      - S3Stack
-      - IAMStack
 Outputs:
   BackupBucketName:
     Description: Name of the backup S3 bucket
